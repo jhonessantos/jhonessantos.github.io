@@ -1,0 +1,130 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="googlebot" content="noindex, nofollow">
+
+  <style type="text/css">
+
+  </style>
+
+  <title>Highcharts Demo</title>
+
+
+</head>
+
+<body>
+  <script src="https://code.highcharts.com/highcharts.js"></script>
+<script src="https://code.highcharts.com/modules/exporting.js"></script>
+
+<div id="container" style="min-width: 310px; height: 400px; margin: 0 auto"></div>
+
+
+
+
+
+
+<script type='text/javascript'>//<![CDATA[
+
+Highcharts.chart('container', {
+    chart: {
+        zoomType: 'xy'
+    },
+    title: {
+        text: 'Valores Líquidos: George'
+    },
+    subtitle: {
+        text: 'Fonte: JowCatcher'
+    },
+    xAxis: [{
+        categories: [
+        '26/03' , '27/03' , '28/03' , '29/03' , '30/03' , '31/03' , '01/04' , '02/04' , '03/04' , '04/04' , '05/04' , '06/04' , '07/04' , '08/04' , '09/04' , '10/04' , '11/04' , '12/04' , '13/04' , '14/04' , '15/04' , '16/04' , '17/04' , '18/04' , '19/04' , '20/04'
+        ],
+        crosshair: true
+    }],
+    yAxis: [
+    {
+        title: {
+            text: 'Lucro Dia',
+            style: {
+                color: Highcharts.getOptions().colors[0]
+            }
+        },
+        labels: {
+            format: 'R$ {value}',
+            style: {
+                color: Highcharts.getOptions().colors[0]
+            }
+        }
+    },
+    {
+        labels: {
+            format: 'R$ {value}',
+            style: {
+                color: Highcharts.getOptions().colors[1]
+            }
+        },
+        title: {
+            text: 'Valor Total',
+            style: {
+                color: Highcharts.getOptions().colors[1]
+            }
+        },
+        opposite: true
+    }],
+    tooltip: {
+        shared: true
+    },
+    legend: {
+        layout: 'vertical',
+        align: 'left',
+        x: 120,
+        verticalAlign: 'top',
+        y: 100,
+        floating: true,
+        backgroundColor: (Highcharts.theme && Highcharts.theme.legendBackgroundColor) || '#FFFFFF'
+    },
+    series: [
+    {
+        name: 'Lucro Dia',
+        type: 'column',
+        data: [
+        8.12,-5.06,0.31,-3.93,-2.25,-3.94,2.81,3.15,2.70,1.46,4.39,0.11,3.38,-1.13,2.59,1.69,1.01,-0.00,6.31,6.70,5.50,11.93,11.24,-3.53,8.00,5.17
+],
+        tooltip: {
+            valuePrefix: 'R$ '
+        }
+
+    },
+    {
+        name: 'Valor Acumulado',
+        type: 'spline',
+        yAxis: 1,
+        data: [
+        108.12, 103.06, 103.36, 99.44, 97.19, 93.25, 96.06, 99.21, 101.91, 103.38, 107.76, 107.88, 111.25, 110.13, 112.71, 114.40, 115.41, 115.41, 121.72, 128.42, 133.92, 145.85, 157.09, 153.56, 161.56, 166.74
+        ],
+        tooltip: {
+            valuePrefix: 'R$ '
+        }
+    }]
+});
+//]]>
+
+</script>
+
+  <script>
+  // tell the embed parent frame the height of the content
+  if (window.parent && window.parent.parent){
+    window.parent.parent.postMessage(["resultsFrame", {
+      height: document.body.getBoundingClientRect().height,
+      slug: "None"
+    }], "*")
+  }
+</script>
+
+</body>
+
+</html>
+
