@@ -12,7 +12,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from itertools import count
-from typing import Optional
 
 RARIDADES_BASE = ("comum", "rara", "super_rara", "ultra_rara")
 

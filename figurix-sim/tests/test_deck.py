@@ -1,7 +1,7 @@
 """Testes de construção de deck — seção 6, caso 10 das regras."""
 import pytest
 
-from cardpool import CardPool, montar_deck_fraco, montar_deck_forte, montar_deck_medio
+from cardpool import CardPool, montar_deck_medio
 from deck import DeckError, contar_por_tipo, validar_deck, validar_deck_ou_lanca
 
 
