@@ -1,0 +1,111 @@
+{
+  "_meta": {
+    "descricao": "Parametros numericos do Figurix Card Game v1 (fonte: FIGURIX_CARDGAME_REGRAS_V1.md secao 12). Nunca hardcode estes valores no motor.",
+    "versao": "v1"
+  },
+
+  "categorias": ["Conexao", "Coracao", "Acao", "Mente", "Criacao"],
+  "roda_vantagens": ["Conexao", "Coracao", "Acao", "Mente", "Criacao"],
+
+  "tipos_guardiao": ["Portais", "Restauracao", "Escudos", "Oprimidos", "Descanso"],
+
+  "raridades": ["comum", "rara", "super_rara", "ultra_rara"],
+  "especiais_por_raridade": {
+    "comemorativa": "comum",
+    "pos_rara": "rara",
+    "pos_super": "super_rara",
+    "pos_ultra": "ultra_rara"
+  },
+
+  "forca_por_raridade": {
+    "comum": [60, 150],
+    "rara": [190, 280],
+    "super_rara": [300, 340],
+    "ultra_rara": [360, 400]
+  },
+  "forca_especiais": {
+    "comemorativa": [160, 180],
+    "pos_rara": [290, 290],
+    "pos_super": [350, 350],
+    "pos_ultra": [410, 410]
+  },
+  "forca_passo": 10,
+
+  "poderes_por_raridade": {
+    "comum": [30, 20, 10],
+    "rara": [50, 30, 10],
+    "super_rara": [70, 40, 20],
+    "ultra_rara": [90, 50, 30]
+  },
+
+  "pontos_por_raridade": {
+    "comum": 1,
+    "rara": 2,
+    "super_rara": 3,
+    "ultra_rara": 3
+  },
+  "pontos_ur": 3,
+  "pontos_vitoria": 10,
+
+  "tamanho_deck": 64,
+  "mao_inicial": 8,
+  "limite_mao": null,
+
+  "compra_por_turno": 1,
+  "compra_dupla_mao_baixa": true,
+  "limiar_mao_baixa": 4,
+
+  "invocacoes_por_turno": 2,
+  "locais_por_turno": 1,
+  "guardioes_por_turno": null,
+  "mestres_por_turno": 1,
+  "juizes_por_turno": 1,
+  "max_itens_por_heroi": 1,
+
+  "custo_ataque": {
+    "mesma_categoria": 1,
+    "categorias_diferentes": 2
+  },
+  "custo_terciario": 0,
+
+  "custos_auxiliares": {
+    "comum": 1,
+    "rara": 2,
+    "super_rara": 3,
+    "ultra_rara": 3
+  },
+  "custo_auxiliar_mixto_extra": 1,
+
+  "custo_barragem": 1,
+  "custo_evolucao": 1,
+
+  "defesa_vantagem": 20,
+  "bonus_item": 10,
+  "mestre_so_principal": true,
+  "vantagem_so_principal": true,
+
+  "desconto_vantagem_barragem": 30,
+  "desconto_juiz_vs_aux": 80,
+
+  "cura_juiz": 100,
+  "cura_descanso": 30,
+
+  "duracao_mestre": {
+    "comum": 1,
+    "rara": 2,
+    "super_rara": 3,
+    "ultra_rara": 4
+  },
+  "duracao_portais": {
+    "comum": 2,
+    "rara": 3,
+    "super_rara": 4,
+    "ultra_rara": 5
+  },
+
+  "penalidade_sem_deck": 5,
+
+  "max_mesmo_mestre": 2,
+  "max_mesmo_guardiao": 1,
+  "max_juiz_deck": 1
+}
