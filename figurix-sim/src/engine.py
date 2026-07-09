@@ -13,7 +13,18 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional
 
-from cards import Heroi, Invocacao, ItemHeroi, Juiz, pontos_da_raridade, raridade_equivalente
+from cards import (
+    Guardiao,
+    Heroi,
+    Invocacao,
+    ItemHeroi,
+    Juiz,
+    Local,
+    Mestre,
+    custo_auxiliar_da_raridade,
+    pontos_da_raridade,
+    raridade_equivalente,
+)
 
 
 # ------------------------------------------------------------------
@@ -27,6 +38,7 @@ class EstadoHeroiCampo:
     item_anexado: Optional[ItemHeroi] = None
     rodada_entrada: int = 0
     evoluiu: bool = False
+    dano_acumulado_rodada: int = 0  # usado pelo Guardião dos Oprimidos
 
     @classmethod
     def entrar_em_campo(cls, carta: Heroi, rodada_atual: int) -> "EstadoHeroiCampo":
@@ -80,7 +92,9 @@ class EstadoPartida:
     local: Optional[EstadoLocal] = None
     rodada: int = 1
     turno_de: str = ""
+    ordem_turno: list = field(default_factory=list)  # [primeiro, segundo] — fixo após o início
     vencedor: Optional[str] = None
+    espirais: dict = field(default_factory=dict)  # nome -> EstadoEspiral (busca de herói em andamento)
     log: list = field(default_factory=list)
 
 
@@ -427,3 +441,194 @@ def _vencedor_por_pontos(estado: EstadoPartida) -> str:
     if estado.jogadores[b].pontos > estado.jogadores[a].pontos:
         return b
     return "empate"
+
+
+# ------------------------------------------------------------------
+# Pagamento de custos com invocações (seção 4)
+# ------------------------------------------------------------------
+
+def pagar_mesma_categoria(mesa: list, categoria: str, quantidade: int) -> Optional[list]:
+    disponiveis = [c for c in mesa if c.categoria == categoria]
+    if len(disponiveis) >= quantidade:
+        return disponiveis[:quantidade]
+    return None
+
+
+def pagar_ataque(mesa: list, categoria_ataque: str, config: dict) -> Optional[list]:
+    custo = config["custo_ataque"]
+    pagamento = pagar_mesma_categoria(mesa, categoria_ataque, custo["mesma_categoria"])
+    if pagamento is not None:
+        return pagamento
+    qtd_mista = custo["categorias_diferentes"]
+    if len(mesa) >= qtd_mista:
+        return mesa[:qtd_mista]
+    return None
+
+
+def pagar_auxiliar(mesa: list, categoria: str, raridade: str, config: dict) -> Optional[list]:
+    custo = custo_auxiliar_da_raridade(raridade, config, mixto=False)
+    pagamento = pagar_mesma_categoria(mesa, categoria, custo)
+    if pagamento is not None:
+        return pagamento
+    custo_misto = custo_auxiliar_da_raridade(raridade, config, mixto=True)
+    if len(mesa) >= custo_misto:
+        return mesa[:custo_misto]
+    return None
+
+
+def pagar_barragem(mesa: list, categoria_barrador: str, config: dict) -> Optional[list]:
+    return pagar_mesma_categoria(mesa, categoria_barrador, config["custo_barragem"])
+
+
+def pagar_evolucao(mesa: list, categoria_heroi: str, item_raro_anexado: bool, config: dict) -> Optional[list]:
+    custo = custo_evolucao(item_raro_anexado, config)
+    if custo == 0:
+        return []
+    return pagar_mesma_categoria(mesa, categoria_heroi, custo)
+
+
+# ------------------------------------------------------------------
+# Ações legais (seção 2 da spec do simulador)
+# ------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class Acao:
+    tipo: str
+    dados: dict = field(default_factory=dict, compare=False)
+
+
+def acoes_legais(
+    estado: EstadoPartida,
+    jogador_nome: str,
+    contadores_turno: dict,
+    config: dict,
+) -> list[Acao]:
+    """Lista de ações legais da fase de ações do turno (não inclui barragens,
+    que são resolvidas em uma janela à parte — ver match.janela_barragem).
+
+    `contadores_turno`: quantas vezes cada tipo de ação já foi usado neste
+    turno (chaves: invocacoes, locais, mestres, juizes).
+    """
+    jogador = estado.jogadores[jogador_nome]
+    mesa = jogador.invocacoes_em_mesa
+    acoes: list[Acao] = [Acao("passar")]
+
+    if jogador.heroi_ativo is None:
+        herois_comuns = [c for c in jogador.mao if isinstance(c, Heroi) and c.raridade == "comum"]
+        for carta in herois_comuns:
+            acoes.append(Acao("trocar_heroi_derrotado", {"carta": carta}))
+        # sem herói ativo: não há mais ações de campo relevantes até repor o herói
+        return acoes
+
+    if contadores_turno.get("invocacoes", 0) < config["invocacoes_por_turno"]:
+        for carta in jogador.mao:
+            if isinstance(carta, Invocacao):
+                acoes.append(Acao("colocar_invocacao", {"carta": carta}))
+
+    if contadores_turno.get("locais", 0) < config["locais_por_turno"]:
+        for carta in jogador.mao:
+            if isinstance(carta, Local):
+                if _troca_de_local_permitida(estado, carta, config):
+                    acoes.append(Acao("colocar_local", {"carta": carta}))
+
+    tem_outra_comum_para_descanso = any(
+        isinstance(c, Heroi) and c.raridade == "comum" for c in jogador.mao
+    )
+    for carta in jogador.mao:
+        if isinstance(carta, Guardiao):
+            if carta.tipo == "Descanso" and not tem_outra_comum_para_descanso:
+                continue  # precisa de uma isca comum na mão para valer a pena
+            pagamento = pagar_auxiliar(mesa, carta.categoria, carta.raridade, config)
+            if pagamento is not None:
+                acoes.append(Acao("invocar_guardiao", {"carta": carta, "pagamento": pagamento}))
+
+    if contadores_turno.get("mestres", 0) < config["mestres_por_turno"]:
+        for carta in jogador.mao:
+            if isinstance(carta, Mestre):
+                pagamento = pagar_auxiliar(mesa, carta.categoria, carta.raridade, config)
+                if pagamento is not None:
+                    acoes.append(Acao("invocar_mestre", {"carta": carta, "pagamento": pagamento}))
+
+    if contadores_turno.get("juizes", 0) < config["juizes_por_turno"]:
+        for carta in jogador.mao:
+            if isinstance(carta, Juiz):
+                pagamento = pagar_auxiliar(mesa, carta.categoria, carta.raridade, config)
+                if pagamento is not None:
+                    acoes.append(Acao("invocar_juiz", {"carta": carta, "pagamento": pagamento}))
+
+    if jogador.heroi_ativo.item_anexado is None:
+        for carta in jogador.mao:
+            if isinstance(carta, ItemHeroi) and carta.tipo_heroi == jogador.heroi_ativo.carta.variacao_id:
+                acoes.append(Acao("anexar_item", {"carta": carta}))
+
+    item_raro_anexado = (
+        jogador.heroi_ativo.item_anexado is not None
+        and jogador.heroi_ativo.item_anexado.raridade == "rara"
+    )
+    for carta in jogador.mao:
+        if not isinstance(carta, Heroi):
+            continue
+        pode, _ = pode_evoluir(
+            jogador.heroi_ativo, carta, rodada_atual=estado.rodada, item_raro_anexado=item_raro_anexado, config=config
+        )
+        if not pode:
+            continue
+        pagamento = pagar_evolucao(mesa, jogador.heroi_ativo.carta.categoria_principal, item_raro_anexado, config)
+        if pagamento is not None:
+            acoes.append(Acao("evoluir", {"carta": carta, "pagamento": pagamento}))
+
+    adversario_nome = next(n for n in estado.jogadores if n != jogador_nome)
+    adversario = estado.jogadores[adversario_nome]
+    if not contadores_turno.get("atacou", False) and adversario.heroi_ativo is not None:
+        pagamento_principal = pagar_ataque(mesa, jogador.heroi_ativo.carta.categoria_principal, config)
+        if pagamento_principal is not None:
+            acoes.append(Acao("atacar", {"tipo_ataque": "principal", "pagamento": pagamento_principal}))
+        pagamento_secundario = pagar_ataque(mesa, jogador.heroi_ativo.carta.categoria_secundaria, config)
+        if pagamento_secundario is not None:
+            acoes.append(Acao("atacar", {"tipo_ataque": "secundario", "pagamento": pagamento_secundario}))
+        acoes.append(Acao("atacar", {"tipo_ataque": "terciario", "pagamento": []}))  # grátis
+
+    return acoes
+
+
+def _troca_de_local_permitida(estado: EstadoPartida, novo_local: Local, config: dict) -> bool:
+    """Troca normal de local (seção 8). Enquanto a trava do Guardião dos
+    Portais estiver ativa, a troca comum (`colocar_local`) fica bloqueada —
+    só uma nova invocação de Portais com força suficiente destrava (seção 8,
+    "exceção estratégica"), o que é um fluxo de invocar_guardiao à parte,
+    não de colocar_local; fora do escopo desta integração (M3)."""
+    if estado.local is None:
+        return True
+    if estado.local.portais_rodadas_restantes > 0:
+        return False
+    if estado.local.carta.raridade == "rara" and novo_local.raridade == "comum":
+        return False
+    return True
+
+
+# ------------------------------------------------------------------
+# Efeitos de guardiões (seção 9) além do Descanso (já coberto acima)
+# ------------------------------------------------------------------
+
+def aplicar_restauracao(heroi: EstadoHeroiCampo, guardiao: Guardiao, config: dict) -> None:
+    """Restaura a força do herói ativo até a força do guardião; -30 se
+    categorias diferentes. A carta do guardião é descartada pelo chamador."""
+    bonus = guardiao.forca_impressa
+    if guardiao.categoria != heroi.carta.categoria_principal:
+        bonus -= config["restauracao_desconto_categoria_diferente"]
+    heroi.forca_atual = min(heroi.carta.forca_impressa, heroi.forca_atual + max(0, bonus))
+
+
+def registrar_dano_para_oprimidos(heroi: EstadoHeroiCampo, dano: int) -> None:
+    heroi.dano_acumulado_rodada += dano
+
+
+def resolver_oprimidos(heroi: EstadoHeroiCampo, guardiao_ativo: bool, config: dict) -> int:
+    """Ao fim da rodada: se guardião dos Oprimidos ativo e força restante
+    <= 60, o dano acumulado vira força de ataque (sem múltiplos/vantagens).
+    Retorna o dano convertido (0 se condição não se aplica)."""
+    dano_convertido = 0
+    if guardiao_ativo and heroi.forca_atual <= 60:
+        dano_convertido = heroi.dano_acumulado_rodada
+    heroi.dano_acumulado_rodada = 0
+    return dano_convertido

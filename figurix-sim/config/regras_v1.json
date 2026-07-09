@@ -89,6 +89,7 @@
 
   "cura_juiz": 100,
   "cura_descanso": 30,
+  "restauracao_desconto_categoria_diferente": 30,
 
   "duracao_mestre": {
     "comum": 1,

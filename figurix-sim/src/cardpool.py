@@ -227,10 +227,21 @@ def montar_deck(
     # heróis: 1 variação distinta por herói (evita colisão de unicidade)
     variacao_ids = list(range(1, N_VARIACOES_OFICIAIS + 1))
     pool.rng.shuffle(variacao_ids)
+    herois: list = []
     for i in range(contagens["heroes"]):
         variacao_id = variacao_ids[i % len(variacao_ids)]
         raridade = _sortear_raridade(orcamento, pool.rng)
-        cartas.append(pool.novo_heroi(raridade, variacao_id=variacao_id))
+        herois.append(pool.novo_heroi(raridade, variacao_id=variacao_id))
+
+    # a mão inicial e a reposição de herói derrotado EXIGEM uma carta comum
+    # (seção 3); sem isso o deck é impossível de jogar. Garantimos que todo
+    # deck gerado tenha pelo menos 1 herói comum, mesmo em orçamentos "forte"
+    # onde a raridade comum pode sair sorteada 0 vezes por azar.
+    if not any(h.raridade == "comum" for h in herois):
+        substituto = herois[0]
+        herois[0] = pool.novo_heroi("comum", variacao_id=substituto.variacao_id)
+
+    cartas.extend(herois)
 
     # mestres: no máximo max_mesmo_mestre por tipo dominado
     max_mesmo_mestre = config["max_mesmo_mestre"]
