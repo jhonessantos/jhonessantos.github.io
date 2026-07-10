@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <title>Figurix Studio — Deck Builder</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+  <header class="topo">
+    <h1>🃏 Figurix Studio</h1>
+    <nav>
+      <a class="ativo" href="/">Deck Builder</a>
+      <a href="#" title="em breve">Simulações</a>
+      <a href="#" title="em breve">Replay</a>
+      <a href="#" title="em breve">Estatísticas</a>
+      <a href="#" title="em breve">Jogar</a>
+    </nav>
+  </header>
+
+  <div class="layout">
+    <!-- painel esquerdo: geração paramétrica -->
+    <div class="painel">
+      <h2>Gerar deck (paramétrico)</h2>
+      <label>Faixa de força</label>
+      <select id="select-faixa-forca"></select>
+
+      <label>Arquétipo</label>
+      <select id="select-arquetipo"></select>
+
+      <label>Perfil de invocações</label>
+      <select id="select-perfil-invocacao"></select>
+
+      <label>Seed (opcional)</label>
+      <input type="number" id="input-seed" placeholder="aleatório" />
+
+      <button id="btn-gerar">Gerar deck</button>
+      <button id="btn-novo" class="secundario">Começar em branco</button>
+
+      <h2 style="margin-top:24px">Adicionar carta manual</h2>
+      <button id="btn-abrir-modal-carta" class="secundario">+ Adicionar carta específica</button>
+    </div>
+
+    <!-- centro: cartas do deck atual -->
+    <div class="painel">
+      <h2>Deck atual (<span id="total-cartas">0</span> cartas)</h2>
+      <div class="grade-cartas" id="grade-cartas"></div>
+
+      <div class="secao-contagens" id="contagens" style="margin-top:14px"></div>
+      <div class="violacoes" id="violacoes"></div>
+
+      <label style="margin-top:18px">Nome do deck</label>
+      <input type="text" id="input-nome-deck" value="Novo deck" />
+      <button id="btn-salvar">Salvar deck</button>
+    </div>
+
+    <!-- direita: decks salvos -->
+    <div class="painel">
+      <h2>Meus decks</h2>
+      <div class="lista-decks" id="lista-decks"></div>
+    </div>
+  </div>
+
+  <!-- modal: adicionar carta manual -->
+  <div class="modal-fundo oculto" id="modal-carta">
+    <div class="modal">
+      <h3>Adicionar carta</h3>
+
+      <label>Tipo de carta</label>
+      <select id="select-tipo-carta"></select>
+
+      <div class="campo-modal" data-campo="raridade">
+        <label>Raridade</label>
+        <select id="campo-raridade"></select>
+      </div>
+      <div class="campo-modal" data-campo="raridade_item">
+        <label>Raridade (comum/rara)</label>
+        <select id="campo-raridade_item"></select>
+      </div>
+      <div class="campo-modal" data-campo="categoria">
+        <label>Categoria</label>
+        <select id="campo-categoria"></select>
+      </div>
+      <div class="campo-modal" data-campo="tipo_guardiao">
+        <label>Tipo de guardião</label>
+        <select id="campo-tipo_guardiao"></select>
+      </div>
+      <div class="campo-modal" data-campo="variacao_id">
+        <label>Variação (1-105, vazio = aleatório)</label>
+        <input type="number" id="campo-variacao_id" min="1" max="105" />
+      </div>
+      <div class="campo-modal" data-campo="participante_id">
+        <label>Participante (vazio = mesmo da variação)</label>
+        <input type="number" id="campo-participante_id" min="1" max="105" />
+      </div>
+      <div class="campo-modal" data-campo="tipo_heroi_dominado">
+        <label>Herói dominado (variação 1-105)</label>
+        <input type="number" id="campo-tipo_heroi_dominado" min="1" max="105" />
+      </div>
+      <div class="campo-modal" data-campo="tipo_heroi">
+        <label>Herói vinculado (variação 1-105)</label>
+        <input type="number" id="campo-tipo_heroi" min="1" max="105" />
+      </div>
+      <div class="campo-modal" data-campo="forca">
+        <label>Força (vazio = aleatória na faixa da raridade)</label>
+        <input type="number" id="campo-forca" />
+      </div>
+
+      <button id="btn-adicionar-carta">Adicionar</button>
+      <button id="btn-fechar-modal" class="secundario">Cancelar</button>
+    </div>
+  </div>
+
+  <script src="/static/js/cards.js"></script>
+  <script src="/static/js/deck_builder.js"></script>
+</body>
+</html>
