@@ -5,6 +5,7 @@ Rodar com: python3 -m uvicorn app:app --reload --port 8765
 """
 from __future__ import annotations
 
+import random
 import sys
 from pathlib import Path
 from typing import Any, Optional
@@ -24,6 +25,7 @@ from card_view import construir_view_carta, desserializar_carta, serializar_cart
 from cardpool import CardPool, N_VARIACOES_OFICIAIS, montar_deck  # noqa: E402
 from config import carregar_config  # noqa: E402
 from deck import contar_por_tipo, validar_deck  # noqa: E402
+from lote_runner import iniciar_lote_em_background  # noqa: E402
 
 app = FastAPI(title="Figurix Studio")
 CONFIG = carregar_config()
@@ -192,6 +194,92 @@ def excluir_deck(deck_id: int) -> dict:
 
 
 # ------------------------------------------------------------------
+# Lotes de simulação (Fase 3): escolher IA A, IA B, deck A, deck B e
+# quantas partidas rodar dessa combinação — roda em segundo plano.
+# ------------------------------------------------------------------
+
+class LoteEntrada(BaseModel):
+    nome: Optional[str] = None
+    ia_a_chave: str
+    ia_b_chave: str
+    deck_a_id: int
+    deck_b_id: int
+    n_partidas: int
+    seed_base: Optional[int] = None
+
+
+@app.post("/api/lotes")
+def criar_lote(entrada: LoteEntrada) -> dict:
+    deck_a = db.obter_deck(entrada.deck_a_id)
+    deck_b = db.obter_deck(entrada.deck_b_id)
+    if deck_a is None or deck_b is None:
+        raise HTTPException(status_code=404, detail="Deck A ou Deck B não encontrado")
+    if entrada.n_partidas < 1:
+        raise HTTPException(status_code=400, detail="n_partidas precisa ser >= 1")
+
+    ias_validas = {ia["chave"] for ia in listar_ias()}
+    if entrada.ia_a_chave not in ias_validas or entrada.ia_b_chave not in ias_validas:
+        raise HTTPException(status_code=400, detail="ia_a_chave ou ia_b_chave desconhecida")
+
+    seed_base = entrada.seed_base if entrada.seed_base is not None else random.randrange(2**31)
+    nome = entrada.nome or f"{entrada.ia_a_chave} x {entrada.ia_b_chave} — {deck_a['nome']} x {deck_b['nome']}"
+
+    lote_id = db.criar_lote(
+        nome=nome,
+        ia_a_chave=entrada.ia_a_chave,
+        ia_b_chave=entrada.ia_b_chave,
+        deck_a_id=entrada.deck_a_id,
+        deck_b_id=entrada.deck_b_id,
+        deck_a_nome=deck_a["nome"],
+        deck_b_nome=deck_b["nome"],
+        n_partidas=entrada.n_partidas,
+        seed_base=seed_base,
+    )
+
+    iniciar_lote_em_background(
+        lote_id=lote_id,
+        config=CONFIG,
+        deck_a_cartas=deck_a["cartas"],
+        deck_b_cartas=deck_b["cartas"],
+        ia_a_chave=entrada.ia_a_chave,
+        ia_b_chave=entrada.ia_b_chave,
+        n_partidas=entrada.n_partidas,
+        seed_base=seed_base,
+    )
+
+    return db.obter_lote(lote_id)
+
+
+@app.get("/api/lotes")
+def listar_lotes() -> list[dict]:
+    return db.listar_lotes()
+
+
+@app.get("/api/lotes/{lote_id}")
+def obter_lote(lote_id: int) -> dict:
+    lote = db.obter_lote(lote_id)
+    if lote is None:
+        raise HTTPException(status_code=404, detail="Lote não encontrado")
+    lote["resumo_vitorias"] = db.resumo_vitorias_lote(lote_id)
+    return lote
+
+
+@app.get("/api/lotes/{lote_id}/partidas")
+def listar_partidas_do_lote(lote_id: int, limit: int = 50, offset: int = 0) -> list[dict]:
+    if db.obter_lote(lote_id) is None:
+        raise HTTPException(status_code=404, detail="Lote não encontrado")
+    return db.listar_partidas_lote(lote_id, limit=limit, offset=offset)
+
+
+@app.delete("/api/lotes/{lote_id}")
+def excluir_lote(lote_id: int) -> dict:
+    if db.obter_lote(lote_id) is None:
+        raise HTTPException(status_code=404, detail="Lote não encontrado")
+    db.excluir_lote(lote_id)
+    return {"ok": True}
+
+
+# ------------------------------------------------------------------
 # Helpers
 # ------------------------------------------------------------------
 
@@ -243,3 +331,8 @@ def index():
 @app.get("/ias")
 def pagina_ias():
     return FileResponse(str(STATIC_DIR / "ias.html"))
+
+
+@app.get("/simulacoes")
+def pagina_simulacoes():
+    return FileResponse(str(STATIC_DIR / "simulacoes.html"))

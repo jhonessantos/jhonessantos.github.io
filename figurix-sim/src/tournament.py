@@ -86,6 +86,41 @@ def _teve_comeback(log: list, papel_de, vencedor_papel: str | None, limiar: int 
     return maior_deficit >= limiar
 
 
+def resumir_resultado(resultado, papel_e_p1: str) -> dict:
+    """Constrói o dict de resumo de UMA partida já jogada (papéis A/B,
+    comeback, Juiz, espiral, uso de mecânicas). Separado de `rodar_torneio`
+    para que outros consumidores (ex.: o motor de lote do webapp) usem
+    exatamente a mesma lógica de resumo sem duplicar código.
+
+    `papel_e_p1`: "A" ou "B" — qual papel jogou como P1 nessa partida
+    específica (ver `alternar_lados` em `rodar_torneio`).
+    """
+
+    def papel_de(fisico: str | None) -> str | None:
+        if fisico is None:
+            return None
+        eh_p1 = fisico == "P1"
+        return papel_e_p1 if eh_p1 else ("B" if papel_e_p1 == "A" else "A")
+
+    pontos_p1, pontos_p2 = resultado.pontos["P1"], resultado.pontos["P2"]
+    pontos_a, pontos_b = (pontos_p1, pontos_p2) if papel_e_p1 == "A" else (pontos_p2, pontos_p1)
+    vencedor_papel = papel_de(resultado.vencedor)
+
+    return {
+        "vencedor_papel": vencedor_papel,
+        "primeiro_papel": papel_de(resultado.primeiro_jogador),
+        "turnos": resultado.turnos,
+        "rodadas": resultado.rodadas,
+        "pontos_a": pontos_a,
+        "pontos_b": pontos_b,
+        "teve_comeback": _teve_comeback(resultado.log, papel_de, vencedor_papel),
+        "juiz_papeis": _juiz_jogado_por(resultado.log, papel_de),
+        "espiral_papeis": _papeis_com_evento(resultado.log, papel_de, "espiral_step", "turno_de"),
+        "mulligan_desistencia_papeis": _papeis_com_evento(resultado.log, papel_de, "mulligan_desistencia", "jogador"),
+        "eventos": _resumir_eventos(resultado.log),
+    }
+
+
 def rodar_torneio(
     config: dict,
     criar_deck_a,
@@ -116,32 +151,5 @@ def rodar_torneio(
             deck1, deck2, ai1, ai2 = deck_b, deck_a, ai_b, ai_a
 
         resultado = jogar_partida(config, deck1, deck2, ai1, ai2, seed=seed)
-
-        def papel_de(fisico: str | None) -> str | None:
-            if fisico is None:
-                return None
-            eh_p1 = fisico == "P1"
-            return papel_e_p1 if eh_p1 else ("B" if papel_e_p1 == "A" else "A")
-
-        pontos_p1, pontos_p2 = resultado.pontos["P1"], resultado.pontos["P2"]
-        pontos_a, pontos_b = (pontos_p1, pontos_p2) if papel_e_p1 == "A" else (pontos_p2, pontos_p1)
-        vencedor_papel = papel_de(resultado.vencedor)
-
-        resumos.append(
-            ResumoPartida(
-                vencedor_papel=vencedor_papel,
-                primeiro_papel=papel_de(resultado.primeiro_jogador),
-                turnos=resultado.turnos,
-                rodadas=resultado.rodadas,
-                pontos_a=pontos_a,
-                pontos_b=pontos_b,
-                teve_comeback=_teve_comeback(resultado.log, papel_de, vencedor_papel),
-                juiz_papeis=_juiz_jogado_por(resultado.log, papel_de),
-                espiral_papeis=_papeis_com_evento(resultado.log, papel_de, "espiral_step", "turno_de"),
-                mulligan_desistencia_papeis=_papeis_com_evento(
-                    resultado.log, papel_de, "mulligan_desistencia", "jogador"
-                ),
-                eventos=_resumir_eventos(resultado.log),
-            )
-        )
+        resumos.append(ResumoPartida(**resumir_resultado(resultado, papel_e_p1)))
     return resumos

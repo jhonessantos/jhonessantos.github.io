@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <title>Figurix Studio — Simulações</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+  <style>
+    .layout-sim {
+      display: grid;
+      grid-template-columns: 340px 1fr;
+      gap: 16px;
+      padding: 16px;
+      align-items: start;
+    }
+    .lista-lotes { display: flex; flex-direction: column; gap: 10px; }
+    .card-lote {
+      background: var(--bg-painel-2);
+      border: 1px solid var(--borda);
+      border-radius: 10px;
+      padding: 12px 14px;
+    }
+    .card-lote .cabecalho {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 8px;
+    }
+    .card-lote .titulo { font-weight: 600; font-size: 13.5px; }
+    .card-lote .status {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 2px 8px;
+      border-radius: 999px;
+      white-space: nowrap;
+    }
+    .status.pendente { background: #374151; color: #d1d5db; }
+    .status.rodando { background: #1e3a8a; color: #bfdbfe; }
+    .status.concluido { background: #14532d; color: #bbf7d0; }
+    .status.erro { background: #7f1d1d; color: #fecaca; }
+    .card-lote .meta { color: var(--texto-fraco); font-size: 11.5px; margin-top: 6px; }
+    .barra-progresso {
+      margin-top: 8px;
+      height: 6px;
+      border-radius: 999px;
+      background: var(--bg);
+      overflow: hidden;
+    }
+    .barra-progresso .preenchimento {
+      height: 100%;
+      background: var(--acento);
+      transition: width 0.3s;
+    }
+    .resumo-vitorias {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+      font-size: 11.5px;
+    }
+    .resumo-vitorias .barra-a, .resumo-vitorias .barra-b {
+      flex: 1;
+      text-align: center;
+      padding: 4px 0;
+      border-radius: 6px;
+      background: var(--bg);
+    }
+    .card-lote .acoes { margin-top: 8px; text-align: right; }
+    .card-lote .acoes button {
+      width: auto;
+      margin-top: 0;
+      padding: 4px 10px;
+      font-size: 11px;
+    }
+    .erro-mensagem {
+      margin-top: 6px;
+      font-size: 10.5px;
+      color: var(--erro);
+      white-space: pre-wrap;
+      max-height: 100px;
+      overflow-y: auto;
+    }
+  </style>
+</head>
+<body>
+  <header class="topo">
+    <h1>🃏 Figurix Studio</h1>
+    <nav>
+      <a href="/">Deck Builder</a>
+      <a href="/ias">IAs</a>
+      <a class="ativo" href="/simulacoes">Simulações</a>
+      <a href="#" title="em breve">Replay</a>
+      <a href="#" title="em breve">Estatísticas</a>
+      <a href="#" title="em breve">Jogar</a>
+    </nav>
+  </header>
+
+  <div class="layout-sim">
+    <div class="painel">
+      <h2>Nova simulação em lote</h2>
+
+      <label>IA do lado A</label>
+      <select id="select-ia-a"></select>
+
+      <label>IA do lado B</label>
+      <select id="select-ia-b"></select>
+
+      <label>Deck do lado A</label>
+      <select id="select-deck-a"></select>
+
+      <label>Deck do lado B</label>
+      <select id="select-deck-b"></select>
+
+      <label>Quantidade de partidas</label>
+      <input type="number" id="input-n-partidas" value="100" min="1" />
+
+      <label>Seed base (opcional)</label>
+      <input type="number" id="input-seed-base" placeholder="aleatória" />
+
+      <label>Nome do lote (opcional)</label>
+      <input type="text" id="input-nome-lote" placeholder="gerado automaticamente" />
+
+      <button id="btn-rodar">Rodar lote</button>
+      <div id="mensagem-erro" class="violacoes" style="display:none"></div>
+    </div>
+
+    <div class="painel">
+      <h2>Lotes (<span id="total-lotes">0</span>)</h2>
+      <div class="lista-lotes" id="lista-lotes"></div>
+    </div>
+  </div>
+
+  <script src="/static/js/simulacoes.js"></script>
+</body>
+</html>
