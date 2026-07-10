@@ -32,6 +32,17 @@ async function iniciar() {
   document.getElementById("btn-fechar-modal-lote").onclick = () => abrirModalLote(false);
   document.getElementById("btn-add-linha-lote").onclick = () => adicionarLinhaLote();
   document.getElementById("btn-gerar-lote").onclick = gerarLote;
+  document.getElementById("btn-salvar-preset-lote").onclick = salvarPresetLoteAtual;
+  document.getElementById("btn-excluir-preset-lote").onclick = excluirPresetLoteSelecionado;
+  document.getElementById("select-preset-lote").onchange = (e) => {
+    const valor = e.target.value;
+    if (!valor) return;
+    const separador = valor.indexOf(":");
+    const tipo = valor.slice(0, separador);
+    const nome = valor.slice(separador + 1);
+    const preset = tipo === "exemplo" ? PRESETS_EXEMPLO_LOTE[nome] : carregarPresetsLoteSalvos()[nome];
+    if (preset) carregarLinhasDoPreset(preset);
+  };
 
   renderizarTudo();
 }
@@ -181,17 +192,21 @@ async function abrirDeck(deckId) {
 // ---- modal de carta manual ----
 
 const CAMPOS_POR_TIPO = {
-  heroi: ["raridade", "variacao_id", "participante_id", "forca"],
+  heroi: ["raridade", "categoria", "variacao_id", "participante_id", "forca"],
   mestre: ["raridade", "tipo_heroi_dominado", "categoria", "forca"],
   guardiao: ["tipo_guardiao", "categoria", "raridade", "forca"],
   juiz: ["categoria", "raridade", "forca"],
   item: ["tipo_heroi", "raridade_item"],
   local: ["categoria", "raridade_item"],
   invocacao: ["categoria"],
+  misto: [], // "misto balanceado" — só existe no preenchimento em lote, não no modal de carta única
 };
 
 function preencherFormularioCartaManual() {
-  preencherSelect("select-tipo-carta", Object.keys(CAMPOS_POR_TIPO));
+  preencherSelect(
+    "select-tipo-carta",
+    Object.keys(CAMPOS_POR_TIPO).filter((tipo) => tipo !== "misto")
+  );
   preencherSelect("campo-raridade", CATALOGO.raridades, true);
   preencherSelect("campo-raridade_item", ["comum", "rara"], true);
   preencherSelect("campo-categoria", CATALOGO.categorias, true);
@@ -226,6 +241,7 @@ async function adicionarCartaManual() {
 
   if (tipo === "heroi") {
     params.raridade = lerTexto("campo-raridade") || "comum";
+    params.categoria = lerTexto("campo-categoria");
     params.variacao_id = lerNumero("campo-variacao_id");
     params.participante_id = lerNumero("campo-participante_id");
     params.forca = lerNumero("campo-forca");
@@ -263,9 +279,31 @@ async function adicionarCartaManual() {
 // ---- preenchimento em lote: N regras dinâmicas ("X cartas de Y tipo de Z categoria"),
 // com uma regra opcional que completa o restante do deck automaticamente ----
 
+const ROTULOS_TIPO_LOTE = {
+  heroi: "Herói",
+  mestre: "Mestre",
+  guardiao: "Guardião",
+  juiz: "Juiz",
+  item: "Item",
+  local: "Local",
+  invocacao: "Invocação",
+  misto: "🎲 Misto balanceado (recomendado p/ o restante)",
+};
+
+function preencherSelectRotulos(select, mapaRotulos) {
+  select.innerHTML = "";
+  for (const [valor, rotulo] of Object.entries(mapaRotulos)) {
+    const opt = document.createElement("option");
+    opt.value = valor;
+    opt.textContent = rotulo;
+    select.appendChild(opt);
+  }
+}
+
 function abrirModalLote(mostrar) {
   const modal = document.getElementById("modal-lote");
   modal.classList.toggle("oculto", !mostrar);
+  preencherSelectPresets();
   if (mostrar && document.querySelectorAll("#linhas-lote .linha-lote").length === 0) {
     adicionarLinhaLote();
   }
@@ -275,7 +313,7 @@ function adicionarLinhaLote() {
   const template = document.getElementById("template-linha-lote");
   const linha = template.content.firstElementChild.cloneNode(true);
 
-  preencherSelectEl(linha.querySelector(".campo-lote-tipo"), Object.keys(CAMPOS_POR_TIPO));
+  preencherSelectRotulos(linha.querySelector(".campo-lote-tipo"), ROTULOS_TIPO_LOTE);
   preencherSelectEl(linha.querySelector(".campo-lote-raridade"), CATALOGO.raridades, true);
   preencherSelectEl(linha.querySelector(".campo-lote-raridade_item"), ["comum", "rara"], true);
   preencherSelectEl(linha.querySelector(".campo-lote-categoria"), CATALOGO.categorias, true);
@@ -315,7 +353,14 @@ function atualizarCamposLinha(linha) {
 }
 
 function atualizarLinhaResto(linha) {
-  linha.querySelector(".campo-lote-quantidade").disabled = linha.querySelector(".campo-lote-resto").checked;
+  const resto = linha.querySelector(".campo-lote-resto").checked;
+  linha.querySelector(".campo-lote-quantidade").disabled = resto;
+  if (resto) {
+    // "misto balanceado" é o valor mais útil por padrão pra quem só quer
+    // completar o deck sem pensar em mais nenhum filtro
+    linha.querySelector(".campo-lote-tipo").value = "misto";
+    atualizarCamposLinha(linha);
+  }
 }
 
 function lerRegraDaLinha(linha) {
@@ -326,6 +371,7 @@ function lerRegraDaLinha(linha) {
   const regra = { tipo_carta: tipo };
   if (tipo === "heroi") {
     regra.raridade = lerTextoEl(linha.querySelector(".campo-lote-raridade")) || "comum";
+    regra.categoria = lerTextoEl(linha.querySelector(".campo-lote-categoria"));
     regra.variacao_id = lerNumeroEl(linha.querySelector(".campo-lote-variacao_id"));
     regra.participante_id = lerNumeroEl(linha.querySelector(".campo-lote-participante_id"));
     regra.forca = lerNumeroEl(linha.querySelector(".campo-lote-forca"));
@@ -410,6 +456,153 @@ async function gerarLote() {
   revalidar();
   abrirModalLote(false);
   document.getElementById("linhas-lote").innerHTML = "";
+  document.getElementById("select-preset-lote").value = "";
+}
+
+// ---- estratégias predefinidas: salva o conjunto de regras atual com um
+// nome, pra reusar depois sem remontar tudo na mão. Guardado no navegador
+// (localStorage) — não precisa de servidor/banco pra isso. ----
+
+const CHAVE_PRESETS_LOTE = "figurix_presets_lote_v1";
+
+const PRESETS_EXEMPLO_LOTE = {
+  "Abundante em invocação + resto balanceado": {
+    regras: [
+      { tipo: "invocacao", quantidade: 30, resto: false, campos: {} },
+      { tipo: "misto", quantidade: 1, resto: true, campos: {} },
+    ],
+  },
+  "Invocação de Ação + Heróis de Coração": {
+    regras: [
+      { tipo: "invocacao", quantidade: 20, resto: false, campos: { categoria: "Acao" } },
+      { tipo: "heroi", quantidade: 15, resto: false, campos: { raridade: "comum", categoria: "Coracao" } },
+      { tipo: "misto", quantidade: 1, resto: true, campos: {} },
+    ],
+  },
+};
+
+function carregarPresetsLoteSalvos() {
+  try {
+    return JSON.parse(localStorage.getItem(CHAVE_PRESETS_LOTE) || "{}");
+  } catch (e) {
+    return {};
+  }
+}
+
+function salvarPresetsLoteSalvos(presets) {
+  localStorage.setItem(CHAVE_PRESETS_LOTE, JSON.stringify(presets));
+}
+
+function preencherSelectPresets() {
+  const select = document.getElementById("select-preset-lote");
+  const valorAtual = select.value;
+  select.innerHTML = "";
+
+  const optVazio = document.createElement("option");
+  optVazio.value = "";
+  optVazio.textContent = "— construir do zero —";
+  select.appendChild(optVazio);
+
+  const grupoExemplos = document.createElement("optgroup");
+  grupoExemplos.label = "Exemplos prontos";
+  for (const nome of Object.keys(PRESETS_EXEMPLO_LOTE)) {
+    const opt = document.createElement("option");
+    opt.value = "exemplo:" + nome;
+    opt.textContent = nome;
+    grupoExemplos.appendChild(opt);
+  }
+  select.appendChild(grupoExemplos);
+
+  const salvos = carregarPresetsLoteSalvos();
+  const nomesSalvos = Object.keys(salvos);
+  if (nomesSalvos.length > 0) {
+    const grupoSalvos = document.createElement("optgroup");
+    grupoSalvos.label = "Minhas estratégias";
+    for (const nome of nomesSalvos) {
+      const opt = document.createElement("option");
+      opt.value = "salvo:" + nome;
+      opt.textContent = nome;
+      grupoSalvos.appendChild(opt);
+    }
+    select.appendChild(grupoSalvos);
+  }
+
+  select.value = valorAtual;
+}
+
+// pro tipo "item"/"local" o filtro de raridade mora num campo com classe
+// diferente (campo-lote-raridade_item) do resto (campo-lote-raridade) —
+// só esses dois precisam desse desvio ao restaurar um preset.
+function _classeDoCampoLote(tipo, campo) {
+  if (campo === "raridade" && (tipo === "item" || tipo === "local")) return "raridade_item";
+  return campo;
+}
+
+function carregarLinhasDoPreset(preset) {
+  document.getElementById("linhas-lote").innerHTML = "";
+  for (const r of preset.regras) {
+    adicionarLinhaLote();
+    const linhas = document.querySelectorAll("#linhas-lote .linha-lote");
+    const linha = linhas[linhas.length - 1];
+
+    linha.querySelector(".campo-lote-quantidade").value = r.quantidade;
+    linha.querySelector(".campo-lote-tipo").value = r.tipo;
+    atualizarCamposLinha(linha);
+
+    for (const [campo, valor] of Object.entries(r.campos || {})) {
+      if (valor === null || valor === undefined) continue;
+      const el = linha.querySelector(`.campo-lote-${_classeDoCampoLote(r.tipo, campo)}`);
+      if (el) el.value = valor;
+    }
+
+    if (r.resto) {
+      linha.querySelector(".campo-lote-resto").checked = true;
+      atualizarLinhaResto(linha);
+    }
+  }
+  atualizarResumoLote();
+}
+
+function extrairPresetAtual() {
+  const linhas = [...document.querySelectorAll("#linhas-lote .linha-lote")];
+  return {
+    regras: linhas.map((linha) => {
+      const lida = lerRegraDaLinha(linha);
+      const campos = {};
+      for (const [chave, valor] of Object.entries(lida.regra)) {
+        if (chave === "tipo_carta" || valor === null || valor === undefined) continue;
+        campos[chave] = valor;
+      }
+      return { tipo: lida.regra.tipo_carta, quantidade: lida.quantidade, resto: lida.resto, campos };
+    }),
+  };
+}
+
+function salvarPresetLoteAtual() {
+  if (document.querySelectorAll("#linhas-lote .linha-lote").length === 0) {
+    alert("Adicione ao menos uma regra antes de salvar como estratégia.");
+    return;
+  }
+  const nome = prompt("Nome da estratégia:");
+  if (!nome) return;
+  const presets = carregarPresetsLoteSalvos();
+  presets[nome] = extrairPresetAtual();
+  salvarPresetsLoteSalvos(presets);
+  preencherSelectPresets();
+  document.getElementById("select-preset-lote").value = "salvo:" + nome;
+}
+
+function excluirPresetLoteSelecionado() {
+  const select = document.getElementById("select-preset-lote");
+  if (!select.value.startsWith("salvo:")) {
+    alert("Selecione uma estratégia salva sua pra excluir (os exemplos prontos não podem ser removidos).");
+    return;
+  }
+  const nome = select.value.slice("salvo:".length);
+  const presets = carregarPresetsLoteSalvos();
+  delete presets[nome];
+  salvarPresetsLoteSalvos(presets);
+  preencherSelectPresets();
 }
 
 iniciar();

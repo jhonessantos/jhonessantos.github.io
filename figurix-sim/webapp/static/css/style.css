@@ -250,6 +250,10 @@ button.perigo {
 .modal h3 { margin-top: 0; }
 .modal.modal-largo { width: 560px; max-height: 84vh; overflow-y: auto; }
 .modal-explicacao { font-size: 12.5px; color: var(--texto-fraco); margin: 0 0 14px 0; line-height: 1.5; }
+
+.preset-lote-barra { display: flex; gap: 8px; align-items: center; margin-bottom: 14px; }
+.preset-lote-barra select { flex: 1; margin-top: 0; }
+.preset-lote-barra button { width: auto; margin-top: 0; flex-shrink: 0; }
 .oculto { display: none !important; }
 
 .linha-lote {
