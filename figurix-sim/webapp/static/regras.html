@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <title>Figurix Studio — Regras</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+  <style>
+    .conteudo-regras { max-width: 980px; margin: 0 auto; padding: 16px 20px 60px; }
+
+    .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+    .tab-botao {
+      width: auto; margin-top: 0;
+      background: var(--bg-painel-2);
+      color: var(--texto-fraco);
+      border: 1px solid var(--borda);
+      padding: 8px 18px;
+    }
+    .tab-botao.ativo { background: var(--acento); color: #0d0e12; border-color: var(--acento); }
+
+    .secao-regra { margin-bottom: 18px; }
+    .secao-regra h2 {
+      font-size: 15px; text-transform: uppercase; letter-spacing: 0.04em;
+      color: var(--texto-fraco); margin: 0 0 10px 0;
+      border-bottom: 1px solid var(--borda); padding-bottom: 8px;
+    }
+    .secao-regra h3 { font-size: 14px; margin: 18px 0 8px 0; }
+    .secao-regra p, .secao-regra li { font-size: 13.5px; line-height: 1.55; color: var(--texto); }
+    .secao-regra ul, .secao-regra ol { padding-left: 20px; margin: 8px 0; }
+    .secao-regra .nota {
+      font-size: 12px; color: var(--texto-fraco); background: var(--bg-painel-2);
+      border-left: 3px solid var(--acento); padding: 8px 12px; border-radius: 0 6px 6px 0;
+      margin: 10px 0;
+    }
+    code.cfg { color: #93c5fd; font-weight: 600; }
+
+    table.regras-tabela { width: 100%; border-collapse: collapse; margin: 10px 0 16px; font-size: 13px; }
+    table.regras-tabela th, table.regras-tabela td {
+      border: 1px solid var(--borda); padding: 6px 10px; text-align: center;
+    }
+    table.regras-tabela th { background: var(--bg-painel-2); color: var(--texto-fraco); font-weight: 600; }
+    table.regras-tabela td:first-child, table.regras-tabela th:first-child { text-align: left; }
+
+    .roda-categorias { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 12px 0; }
+    .roda-categorias .cat-item {
+      display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px;
+      background: var(--bg-painel-2); border: 1px solid var(--borda); font-size: 13px; font-weight: 600;
+    }
+    .roda-categorias .seta { color: var(--texto-fraco); }
+
+    .carta-com-texto { display: flex; gap: 14px; align-items: flex-start; margin: 12px 0 20px; }
+    .carta-com-texto .exemplo-carta { flex-shrink: 0; min-width: 96px; min-height: 132px; }
+    .carta-com-texto .texto { flex: 1; }
+    .carta-com-texto .texto h3 { margin-top: 0; }
+
+    .grade-guardioes { display: flex; flex-direction: column; gap: 14px; }
+    .linha-guardiao { display: flex; gap: 14px; align-items: flex-start; }
+    .linha-guardiao .exemplo-carta { flex-shrink: 0; min-width: 96px; min-height: 132px; }
+
+    .passo-jogo { margin-bottom: 22px; }
+    .passo-jogo .numero {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 24px; height: 24px; border-radius: 50%; background: var(--acento); color: #0d0e12;
+      font-weight: 800; font-size: 12.5px; margin-right: 8px;
+    }
+    .passo-jogo h3 { display: inline-flex; align-items: center; font-size: 15px; margin: 0 0 8px 0; }
+  </style>
+</head>
+<body>
+  <header class="topo">
+    <h1>🃏 Figurix Studio</h1>
+    <nav>
+      <a href="/">Deck Builder</a>
+      <a href="/ias">IAs</a>
+      <a class="ativo" href="/regras">Regras</a>
+      <a href="/simulacoes">Simulações</a>
+      <a href="#" title="em breve">Replay</a>
+      <a href="#" title="em breve">Estatísticas</a>
+      <a href="#" title="em breve">Jogar</a>
+    </nav>
+  </header>
+
+  <div class="conteudo-regras">
+    <div class="tabs">
+      <button class="tab-botao ativo" data-tab="tab-cartas">📖 Regras das cartas</button>
+      <button class="tab-botao" data-tab="tab-como-jogar">🎮 Como jogar (passo a passo)</button>
+    </div>
+
+    <!-- ================= ABA 1: CARTAS ================= -->
+    <div id="tab-cartas" class="tab-conteudo">
+
+      <div class="painel secao-regra">
+        <h2>Sistema de raridades</h2>
+        <p>
+          Toda carta de personagem (Herói, Mestre, Guardião, Juiz) tem uma raridade que define sua
+          faixa de força impressa, seus poderes de ataque e quantos pontos ela vale ao ser derrotada.
+        </p>
+        <table class="regras-tabela">
+          <thead>
+            <tr><th>Raridade</th><th>Força impressa</th><th>Poder principal</th><th>Poder secundário</th><th>Poder terciário</th><th>Pontos ao derrotar</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Comum</td><td><span data-cfg="forca_por_raridade.comum.0"></span>–<span data-cfg="forca_por_raridade.comum.1"></span></td><td><span data-cfg="poderes_por_raridade.comum.0"></span></td><td><span data-cfg="poderes_por_raridade.comum.1"></span></td><td><span data-cfg="poderes_por_raridade.comum.2"></span></td><td><span data-cfg="pontos_por_raridade.comum"></span></td></tr>
+            <tr><td>Rara</td><td><span data-cfg="forca_por_raridade.rara.0"></span>–<span data-cfg="forca_por_raridade.rara.1"></span></td><td><span data-cfg="poderes_por_raridade.rara.0"></span></td><td><span data-cfg="poderes_por_raridade.rara.1"></span></td><td><span data-cfg="poderes_por_raridade.rara.2"></span></td><td><span data-cfg="pontos_por_raridade.rara"></span></td></tr>
+            <tr><td>Super rara</td><td><span data-cfg="forca_por_raridade.super_rara.0"></span>–<span data-cfg="forca_por_raridade.super_rara.1"></span></td><td><span data-cfg="poderes_por_raridade.super_rara.0"></span></td><td><span data-cfg="poderes_por_raridade.super_rara.1"></span></td><td><span data-cfg="poderes_por_raridade.super_rara.2"></span></td><td><span data-cfg="pontos_por_raridade.super_rara"></span></td></tr>
+            <tr><td>Ultra rara</td><td><span data-cfg="forca_por_raridade.ultra_rara.0"></span>–<span data-cfg="forca_por_raridade.ultra_rara.1"></span></td><td><span data-cfg="poderes_por_raridade.ultra_rara.0"></span></td><td><span data-cfg="poderes_por_raridade.ultra_rara.1"></span></td><td><span data-cfg="poderes_por_raridade.ultra_rara.2"></span></td><td><span data-cfg="pontos_por_raridade.ultra_rara"></span></td></tr>
+          </tbody>
+        </table>
+        <p class="nota">
+          ★ Raridades especiais (comemorativa, pós-rara, pós-super, pós-ultra) são <strong>totalmente
+          equivalentes</strong> à raridade base correspondente — mesmos poderes, mesmos pontos, mesmas
+          regras de deck. Só mudam a faixa de força impressa (comemorativa
+          <span data-cfg="forca_especiais.comemorativa.0"></span>–<span data-cfg="forca_especiais.comemorativa.1"></span>,
+          pós-rara <span data-cfg="forca_especiais.pos_rara.0"></span>,
+          pós-super <span data-cfg="forca_especiais.pos_super.0"></span>,
+          pós-ultra <span data-cfg="forca_especiais.pos_ultra.0"></span>) e a "pele" visual (selo ★).
+          A força sempre varia em passos de <span data-cfg="forca_passo"></span>.
+        </p>
+      </div>
+
+      <div class="painel secao-regra">
+        <h2>As 5 categorias e a roda de vantagens</h2>
+        <p>Toda carta com categoria pertence a uma destas 5, dispostas em uma roda cíclica:</p>
+        <div class="roda-categorias" id="roda-categorias"></div>
+        <p>
+          Cada categoria tem <strong>vantagem</strong> sobre a categoria seguinte da roda. Essa vantagem
+          é usada em dois momentos diferentes:
+        </p>
+        <ul>
+          <li><strong>No ataque:</strong> se a categoria do herói atacante tem vantagem sobre a do herói
+            defensor, o múltiplo de dano ganha +1 (normalmente só vale para o ataque principal).</li>
+          <li><strong>Na defesa:</strong> se a categoria do herói <em>defensor</em> tem vantagem sobre a
+            categoria do ataque recebido, o dano final tem um desconto de <code class="cfg" data-cfg="defesa_vantagem"></code>
+            pontos (nunca fica negativo).</li>
+        </ul>
+      </div>
+
+      <div class="painel secao-regra">
+        <h2>Tipos de carta</h2>
+
+        <div class="carta-com-texto">
+          <div class="exemplo-carta" id="exemplo-heroi-comum"></div>
+          <div class="texto">
+            <h3>Herói (H)</h3>
+            <p>
+              É a carta que fica em campo lutando. Tem uma categoria principal (sua identidade), uma
+              secundária e uma terciária — cada uma com seu próprio poder de ataque (ver tabela de
+              raridades acima). Só um herói fica ativo em campo por vez.
+            </p>
+            <p>
+              Cada personagem ("variação") pode ter até <strong>4 cópias</strong> no deck — uma por
+              raridade base (comum/rara/super rara/ultra rara). Duas cópias da mesma raridade do mesmo
+              personagem não podem coexistir no deck.
+            </p>
+            <p>Um herói pode <strong>evoluir</strong> para uma carta de raridade maior do mesmo
+              personagem — ver a aba "Como jogar" para as condições.</p>
+          </div>
+        </div>
+
+        <div class="carta-com-texto">
+          <div class="exemplo-carta" id="exemplo-mestre"></div>
+          <div class="texto">
+            <h3>Mestre (M)</h3>
+            <p>
+              Domina um personagem específico. Enquanto estiver em campo, dá +1 no múltiplo de dano
+              sempre que aquele herói ataca (normalmente só no ataque principal).
+            </p>
+            <p>
+              Dura um número de rodadas conforme a raridade — comum <span data-cfg="duracao_mestre.comum"></span>,
+              rara <span data-cfg="duracao_mestre.rara"></span>,
+              super rara <span data-cfg="duracao_mestre.super_rara"></span>,
+              ultra rara <span data-cfg="duracao_mestre.ultra_rara"></span> — e então vai para o descarte.
+            </p>
+            <p class="nota">Máximo de <span data-cfg="max_mesmo_mestre"></span> cópias do mesmo Mestre
+              (mesmo personagem dominado) no deck. Pode ser barrado por outro Mestre ou Guardião mais forte.</p>
+          </div>
+        </div>
+
+        <h3>Guardião (G)</h3>
+        <p>5 tipos, cada um com um efeito próprio ao entrar em campo:</p>
+        <div class="grade-guardioes">
+          <div class="linha-guardiao">
+            <div class="exemplo-carta" id="exemplo-guardiao-portais"></div>
+            <p><strong>Portais</strong> — trava a troca do Local por
+              <span data-cfg="duracao_portais.comum"></span>–<span data-cfg="duracao_portais.ultra_rara"></span>
+              rodadas (conforme raridade). Só uma nova invocação de Portais mais forte destrava antes disso.</p>
+          </div>
+          <div class="linha-guardiao">
+            <div class="exemplo-carta" id="exemplo-guardiao-restauracao"></div>
+            <p><strong>Restauração</strong> — cura o herói ativo até a força impressa do próprio
+              Guardião (desconto de <span data-cfg="restauracao_desconto_categoria_diferente"></span> se a
+              categoria do Guardião for diferente da do herói). Efeito único, depois vai ao descarte.</p>
+          </div>
+          <div class="linha-guardiao">
+            <div class="exemplo-carta" id="exemplo-guardiao-escudos"></div>
+            <p><strong>Escudos</strong> — absorve dano do próximo golpe recebido pelo herói ativo,
+              funcionando como uma reserva extra de força por 1 rodada.</p>
+          </div>
+          <div class="linha-guardiao">
+            <div class="exemplo-carta" id="exemplo-guardiao-oprimidos"></div>
+            <p><strong>Oprimidos</strong> — fica em campo permanentemente (sem expirar). Se o herói
+              cair a 60 de força ou menos, todo o dano acumulado na rodada vira um contra-ataque
+              automático no adversário.</p>
+          </div>
+          <div class="linha-guardiao">
+            <div class="exemplo-carta" id="exemplo-guardiao-descanso"></div>
+            <p><strong>Descanso</strong> — manda o herói ativo de volta pra mão por 1 rodada,
+              colocando uma carta comum como "isca" no lugar. Se a isca cair, o adversário ganha os
+              pontos dela; se sobreviver, o titular retorna com +<span data-cfg="cura_descanso"></span> de força.</p>
+          </div>
+        </div>
+        <p class="nota">Máximo de <span data-cfg="max_mesmo_guardiao"></span> cópia do MESMO guardião
+          específico (tipo + categoria + raridade) no deck. Guardiões também podem "barrar" (contestar)
+          outras cartas auxiliares entrando em campo.</p>
+
+        <div class="carta-com-texto">
+          <div class="exemplo-carta" id="exemplo-juiz"></div>
+          <div class="texto">
+            <h3>Juiz (J)</h3>
+            <p>A carta mais impactante do jogo. Ao entrar em campo, nesta ordem:</p>
+            <ol>
+              <li>Iguala a força do herói adversário à do seu próprio herói — só se o adversário
+                tiver mais força restante que você.</li>
+              <li>Cura seu próprio herói em +<span data-cfg="cura_juiz"></span> (limitado à força impressa).</li>
+              <li>Deixa você escolher remover item, guardiões, Mestre e/ou Local do adversário
+                (invocações nunca são afetadas).</li>
+            </ol>
+            <p class="nota">Vai direto para o descarte no fim do turno em que entrou — nunca
+              permanece em campo. Máximo <span data-cfg="max_juiz_deck"></span> Juiz no deck inteiro,
+              <span data-cfg="juizes_por_turno"></span> uso por turno.</p>
+          </div>
+        </div>
+
+        <div class="carta-com-texto">
+          <div class="exemplo-carta" id="exemplo-item"></div>
+          <div class="texto">
+            <h3>Item de Herói (I)</h3>
+            <p>
+              Vinculado a um personagem específico (qualquer raridade dele). Só é possível ter
+              <span data-cfg="max_itens_por_heroi"></span> item por herói ativo por vez.
+            </p>
+            <p>Dá +<span data-cfg="bonus_item"></span> de poder ao ataque principal. Itens
+              <strong>raros</strong> também permitem que o herói evolua imediatamente, sem esperar a
+              rodada seguinte.</p>
+          </div>
+        </div>
+
+        <div class="carta-com-texto">
+          <div class="exemplo-carta" id="exemplo-local"></div>
+          <div class="texto">
+            <h3>Local (L)</h3>
+            <p>
+              Define o cenário da partida. Se a categoria do Local bater com a categoria do ataque
+              usado, o múltiplo de dano ganha +1.
+            </p>
+            <p>Trocar de Local é limitado a <span data-cfg="locais_por_turno"></span> por turno; não é
+              possível trocar um Local raro por um comum enquanto o atual está valendo, nem enquanto a
+              trava do Guardião dos Portais estiver ativa.</p>
+          </div>
+        </div>
+
+        <div class="carta-com-texto">
+          <div class="exemplo-carta" id="exemplo-invocacao"></div>
+          <div class="texto">
+            <h3>Invocação</h3>
+            <p>
+              É o "combustível" do jogo: paga o custo de atacar, invocar cartas auxiliares
+              (Mestre/Guardião/Juiz), evoluir heróis e barrar. Tem apenas uma categoria — sem raridade
+              nem força.
+            </p>
+            <p class="nota">Nunca é afetada pela limpeza seletiva do Juiz.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="painel secao-regra">
+        <h2>Regras de montagem de deck</h2>
+        <ul>
+          <li>O deck tem exatamente <code class="cfg" data-cfg="tamanho_deck"></code> cartas.</li>
+          <li>Heróis: até 4 cópias do mesmo personagem — uma por raridade base.</li>
+          <li>Mestres: até <code class="cfg" data-cfg="max_mesmo_mestre"></code> cópias do mesmo Mestre (mesmo personagem dominado).</li>
+          <li>Guardiões: até <code class="cfg" data-cfg="max_mesmo_guardiao"></code> cópia do mesmo guardião específico (tipo + categoria + raridade).</li>
+          <li>Juiz: até <code class="cfg" data-cfg="max_juiz_deck"></code> no deck inteiro.</li>
+          <li>Itens, Locais e Invocações: sem limite de cópias.</li>
+        </ul>
+        <p>Você pode montar decks no <a href="/" style="color:var(--acento)">Deck Builder</a>, tanto
+          gerando parametricamente quanto editando carta por carta.</p>
+      </div>
+    </div>
+
+    <!-- ================= ABA 2: COMO JOGAR ================= -->
+    <div id="tab-como-jogar" class="tab-conteudo oculto">
+
+      <div class="painel secao-regra">
+        <div class="passo-jogo">
+          <h3><span class="numero">1</span> Preparação</h3>
+          <p>Embaralhe seu deck de <span data-cfg="tamanho_deck"></span> cartas e compre uma mão inicial
+            de <span data-cfg="mao_inicial"></span> cartas.</p>
+          <p>Sua mão <strong>precisa</strong> ter pelo menos 1 herói comum. Se não tiver, você desiste
+            dela: devolve as cartas ao deck, embaralha e compra outra mão do zero — e seu adversário
+            ganha +1 compra extra (a partir da sua 2ª desistência seguida, ele também ganha +1 ponto).
+            Não há limite de tentativas.</p>
+          <p class="nota">Isso não é um "bug" a evitar — é uma escolha de construção legítima: um deck
+            com poucos heróis comuns pode aceitar ceder pontos em troca de outras vantagens de deck.</p>
+          <p>Par ou ímpar decide quem tem prioridade inicial. Cada jogador escolhe qual herói comum
+            entra em campo primeiro — quem escolheu o herói de <strong>menor força</strong> joga
+            primeiro (empate: decide quem tinha a prioridade).</p>
+        </div>
+
+        <div class="passo-jogo">
+          <h3><span class="numero">2</span> Estrutura de um turno</h3>
+          <p>No seu turno, nesta ordem:</p>
+          <ol>
+            <li><strong>Compra:</strong> puxe <span data-cfg="compra_por_turno"></span> carta (2 se sua
+              mão tiver <span data-cfg="limiar_mao_baixa"></span> cartas ou menos).</li>
+            <li>Sem herói ativo e sem herói comum na mão? Você entra na
+              <strong>espiral de busca de herói</strong> (passo 5).</li>
+            <li><strong>Fase de ações</strong> — repita até passar ou atacar:
+              <ul>
+                <li>Sem herói ativo: só pode colocar um herói comum da mão em campo.</li>
+                <li>Com herói ativo: pode invocar até <span data-cfg="invocacoes_por_turno"></span>
+                  invocações, trocar de Local, invocar Guardião/Mestre/Juiz (pagando com invocações),
+                  anexar um item ao herói ativo, evoluí-lo (se elegível), ou atacar.</li>
+                <li><strong>Atacar encerra sua fase de ações</strong> — só 1 ataque por turno.</li>
+              </ul>
+            </li>
+            <li>Se você foi o segundo jogador a agir na rodada, ela avança: duração de Mestre e
+              Guardiões diminui, a trava de Portais conta 1 rodada a menos, o Descanso pode retornar.</li>
+          </ol>
+        </div>
+
+        <div class="passo-jogo">
+          <h3><span class="numero">3</span> Pagando com invocações</h3>
+          <table class="regras-tabela">
+            <thead><tr><th>Ação</th><th>Custo em invocações</th></tr></thead>
+            <tbody>
+              <tr><td>Atacar (mesma categoria do herói)</td><td><span data-cfg="custo_ataque.mesma_categoria"></span></td></tr>
+              <tr><td>Atacar (categorias mistas)</td><td><span data-cfg="custo_ataque.categorias_diferentes"></span></td></tr>
+              <tr><td>Ataque terciário</td><td>grátis</td></tr>
+              <tr><td>Invocar Guardião/Mestre/Juiz — comum</td><td><span data-cfg="custos_auxiliares.comum"></span> (+<span data-cfg="custo_auxiliar_mixto_extra"></span> se misto)</td></tr>
+              <tr><td>Invocar Guardião/Mestre/Juiz — rara</td><td><span data-cfg="custos_auxiliares.rara"></span> (+<span data-cfg="custo_auxiliar_mixto_extra"></span> se misto)</td></tr>
+              <tr><td>Invocar Guardião/Mestre/Juiz — super rara</td><td><span data-cfg="custos_auxiliares.super_rara"></span> (+<span data-cfg="custo_auxiliar_mixto_extra"></span> se misto)</td></tr>
+              <tr><td>Invocar Guardião/Mestre/Juiz — ultra rara</td><td><span data-cfg="custos_auxiliares.ultra_rara"></span> (+<span data-cfg="custo_auxiliar_mixto_extra"></span> se misto)</td></tr>
+              <tr><td>Evoluir herói</td><td><span data-cfg="custo_evolucao"></span> (grátis com item raro anexado)</td></tr>
+              <tr><td>Barrar (contestar)</td><td><span data-cfg="custo_barragem"></span></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="passo-jogo">
+          <h3><span class="numero">4</span> Combate</h3>
+          <p>Escolha qual poder usar: principal, secundário ou terciário (cada um com seu próprio valor,
+            ver a aba "Regras das cartas").</p>
+          <p>O múltiplo de dano começa em 1 e ganha +1 para cada condição verdadeira:</p>
+          <ul>
+            <li>O Local em campo favorece a categoria do ataque usado.</li>
+            <li>Um Mestre daquele herói está em campo.</li>
+            <li>A categoria do seu herói tem vantagem sobre a do defensor na roda (ver aba de cartas).</li>
+          </ul>
+          <p class="nota">As duas últimas condições normalmente só valem para o ataque principal.</p>
+          <p>Se houver item anexado, o ataque principal ganha +<span data-cfg="bonus_item"></span> de
+            poder <em>antes</em> de aplicar o múltiplo.</p>
+          <p>Defesa: se a categoria do herói <strong>defensor</strong> tem vantagem sobre a categoria do
+            ataque recebido, o dano final tem um desconto de <span data-cfg="defesa_vantagem"></span>
+            (nunca abaixo de 0).</p>
+          <p>Herói derrotado (força chega a 0): quem atacou ganha os pontos daquela raridade; o
+            jogador derrotado perde o herói (e o item anexado) e precisa colocar outro herói comum da
+            mão, se tiver algum.</p>
+        </div>
+
+        <div class="passo-jogo">
+          <h3><span class="numero">5</span> Espiral de busca de herói</h3>
+          <p>Se você fica sem herói ativo <strong>e</strong> sem herói comum na mão, entra numa
+            escalada: compra N cartas por turno (começa em 1, sobe +1 a cada turno que continuar sem
+            achar um comum), só tentando puxar um herói comum.</p>
+          <p>Se o deck do adversário também esgotar durante sua busca, ele passa a ganhar 1 ponto por
+            carta que você compra.</p>
+          <p>Se o <strong>seu</strong> deck acabar antes de você achar um herói comum, você cede
+            <span data-cfg="penalidade_sem_deck"></span> pontos ao adversário e a partida termina ali —
+            vence quem tiver mais pontos no momento.</p>
+        </div>
+
+        <div class="passo-jogo">
+          <h3><span class="numero">6</span> Barragem (contestação)</h3>
+          <p>Guardiões, Mestres e Juízes podem ser contestados quando entram em campo. Funciona como
+            uma pilha: quem contesta paga <span data-cfg="custo_barragem"></span> invocação(ões) e entra
+            no topo; resolve-se do topo para a base, aos pares que se anulam — o que sobrar sozinho
+            (se sobrar) resolve normalmente.</p>
+          <ul>
+            <li>Um <strong>Guardião</strong> barra outro Guardião de força menor (ou, com vantagem de
+              categoria, força até <span data-cfg="desconto_vantagem_barragem"></span> menor).</li>
+            <li>Um <strong>Mestre</strong> barra Guardião ou Mestre de força menor.</li>
+            <li>Um <strong>Juiz</strong> barra outro Juiz (mesma regra do Guardião) ou barra
+              Guardião/Mestre com força até <span data-cfg="desconto_juiz_vs_aux"></span> menor.</li>
+          </ul>
+        </div>
+
+        <div class="passo-jogo">
+          <h3><span class="numero">7</span> Evolução de herói</h3>
+          <p>Só é possível evoluir para uma carta de <strong>raridade maior do mesmo personagem</strong>,
+            e apenas a partir da rodada seguinte à entrada em campo — a não ser que haja um item
+            <strong>raro</strong> anexado, que libera a evolução imediatamente.</p>
+          <p>Custa <span data-cfg="custo_evolucao"></span> invocação(ões) da categoria do próprio herói
+            (grátis com item raro anexado). Um herói só evolui 1 vez por partida; ao evoluir, a força
+            volta ao máximo da nova carta.</p>
+        </div>
+
+        <div class="passo-jogo">
+          <h3><span class="numero">8</span> Fim de partida</h3>
+          <p>A partida termina quando alguém atinge <span data-cfg="pontos_vitoria"></span> pontos.</p>
+          <p>Ela também pode terminar antes disso: pela espiral de desistência de mão (passo 1) ou pela
+            espiral de busca de herói (passo 5). Nesses casos, vence quem tiver mais pontos no
+            momento — empate é raro, mas possível.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/js/cards.js"></script>
+  <script src="/static/js/regras.js"></script>
+</body>
+</html>

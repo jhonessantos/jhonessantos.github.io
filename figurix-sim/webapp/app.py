@@ -38,6 +38,13 @@ db.inicializar_banco()
 # Catálogo — tudo que o frontend precisa para montar os formulários
 # ------------------------------------------------------------------
 
+@app.get("/api/config")
+def obter_config() -> dict:
+    """Config bruta (regras_v1.json) — usada pela página de Regras para
+    exibir os números oficiais sem duplicá-los/hardcodar no HTML."""
+    return CONFIG
+
+
 @app.get("/api/catalogo")
 def catalogo() -> dict:
     return {
@@ -336,3 +343,8 @@ def pagina_ias():
 @app.get("/simulacoes")
 def pagina_simulacoes():
     return FileResponse(str(STATIC_DIR / "simulacoes.html"))
+
+
+@app.get("/regras")
+def pagina_regras():
+    return FileResponse(str(STATIC_DIR / "regras.html"))
