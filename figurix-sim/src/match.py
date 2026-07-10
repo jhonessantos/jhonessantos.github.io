@@ -25,7 +25,7 @@ from chains import ElementoCadeia, pode_barrar, resolver_cadeia
 
 MAX_TURNOS_SEGURANCA = 1500
 MAX_ACOES_POR_TURNO_SEGURANCA = 200
-MAX_TENTATIVAS_MULLIGAN = 50
+MAX_TENTATIVAS_MULLIGAN = 500  # puramente defensivo — o término normal é via pontos_vitoria, bem antes disso
 
 
 @dataclass
@@ -48,6 +48,16 @@ def configurar_partida(config: dict, deck1: list, deck2: list, nome1: str = "P1"
     perdedor = nome2 if vencedor_par_ou_impar == nome1 else nome1
     titular = _preparar_maos_iniciais(estado, [perdedor, vencedor_par_ou_impar], vencedor_par_ou_impar, config, rng)
 
+    if estado.vencedor is not None:
+        # a espiral de desistências de mulligan (seção 3.4) já decidiu a
+        # partida antes dela começar de fato: um jogador optou por um deck
+        # sem heróis comuns o bastante e cedeu pontos até o adversário
+        # fechar em pontos_vitoria. É uma escolha de deck legítima — o
+        # simulador deve deixar isso acontecer, não impedir a construção.
+        estado.ordem_turno = [perdedor, vencedor_par_ou_impar]
+        estado.turno_de = estado.ordem_turno[0]
+        return estado
+
     cartas_iniciais = {}
     for nome, jogador in estado.jogadores.items():
         comuns = [c for c in jogador.mao if isinstance(c, Heroi) and c.raridade == "comum"]
@@ -68,6 +78,13 @@ def configurar_partida(config: dict, deck1: list, deck2: list, nome1: str = "P1"
 
 
 def _preparar_maos_iniciais(estado, ordem_decisao, titular_inicial, config, rng):
+    """Seção 3, itens 3-5. Um deck com poucos (ou nenhum) heróis comuns é
+    uma escolha de construção válida, não algo a impedir: se o jogador não
+    consegue montar uma mão com herói comum, ele desiste, o adversário
+    ganha +1 compra e, a partir da 2ª desistência, +1 ponto por tentativa —
+    "sem limite" (seção 3.4). Se isso levar o adversário a `pontos_vitoria`
+    antes mesmo da partida começar, ele vence ali mesmo (`estado.vencedor`).
+    """
     perdedor, vencedor = ordem_decisao
     titular = titular_inicial
     desistencias = {perdedor: 0, vencedor: 0}
@@ -98,8 +115,19 @@ def _preparar_maos_iniciais(estado, ordem_decisao, titular_inicial, config, rng)
             if desistencias[nome] >= 2:
                 outro.pontos += 1
                 _log_pontos(estado)
+                if outro.pontos >= config["pontos_vitoria"]:
+                    estado.vencedor = outro_nome
+                    return titular
             if nome == titular and outro_nome in aceitas:
                 titular = outro_nome
+
+    if len(aceitas) < 2:
+        # Só deve ocorrer com uma config de pontos_vitoria absurdamente alta
+        # (o caminho normal de término é o `return` acima, bem antes disso).
+        raise RuntimeError(
+            "Espiral de mulligan não convergiu em MAX_TENTATIVAS_MULLIGAN tentativas — "
+            "verifique config['pontos_vitoria']."
+        )
 
     return titular
 
