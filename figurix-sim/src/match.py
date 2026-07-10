@@ -108,6 +108,7 @@ def _preparar_maos_iniciais(estado, ordem_decisao, titular_inicial, config, rng)
             jogador.deck.extend(jogador.mao)
             jogador.mao = []
             desistencias[nome] += 1
+            eng.registrar_evento(estado, acao="mulligan_desistencia", jogador=nome)
             outro_nome = perdedor if nome == vencedor else vencedor
             outro = estado.jogadores[outro_nome]
             if outro.deck:
@@ -233,6 +234,7 @@ def jogar_turno(estado: eng.EstadoPartida, ais: dict, config: dict, rng: random.
 
     # 2. Espiral de busca de herói (seção 10)
     if jogador.heroi_ativo is None and eng.em_busca_de_heroi(jogador):
+        eng.registrar_evento(estado, acao="espiral_step")
         espiral = estado.espirais.setdefault(jogador_nome, eng.EstadoEspiral(jogador_em_busca=jogador_nome))
         vencedor = eng.passo_espiral(estado, jogador, adversario, espiral, config)
         _log_pontos(estado)

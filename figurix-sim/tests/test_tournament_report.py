@@ -104,3 +104,24 @@ def test_metrica_vantagem_primeiro_jogador(config):
     )
     metricas = metrica_vantagem_primeiro_jogador(resumos)
     assert 0.0 <= metricas["winrate_primeiro_jogador"] <= 1.0
+
+
+def test_espiral_papeis_detecta_deck_com_poucos_herois(config):
+    """Um deck extremo (10 heróis) enfrentando um normal deve cair na
+    espiral de busca de herói (seção 10) com bem mais frequência."""
+    from cardpool import montar_deck
+
+    resumos = rodar_torneio(
+        config,
+        criar_deck_a=lambda seed: montar_deck(
+            config, seed=seed, faixa_forca="medio", arquetipo="hiperinvocacao", perfil_invocacoes="abundante"
+        ),
+        criar_deck_b=lambda seed: montar_deck_medio(config, seed=seed + 100_000),
+        criar_ai_a=lambda seed: HeuristicAI(seed=seed),
+        criar_ai_b=lambda seed: HeuristicAI(seed=seed + 1),
+        n_partidas=60,
+        seed_base=0,
+    )
+    pct_espiral_a = sum(1 for r in resumos if "A" in r.espiral_papeis) / len(resumos)
+    pct_espiral_b = sum(1 for r in resumos if "B" in r.espiral_papeis) / len(resumos)
+    assert pct_espiral_a > pct_espiral_b

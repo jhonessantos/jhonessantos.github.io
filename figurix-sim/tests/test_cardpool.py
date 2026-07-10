@@ -77,3 +77,17 @@ def test_perfil_invocacoes_e_um_eixo_independente_e_ordenado(config, arquetipo):
 def test_perfil_invocacoes_invalido_leva_erro(config):
     with pytest.raises(ValueError):
         montar_deck(config, perfil_invocacoes="inexistente", seed=1)
+
+
+def test_arquetipo_hiperinvocacao_e_extremo_mas_valido(config):
+    """Arquétipo "insano" propositalmente: poucos heróis, invocação no talo —
+    usado para testar os limites da economia de invocações (seção 4)."""
+    deck = montar_deck(config, faixa_forca="medio", arquetipo="hiperinvocacao", perfil_invocacoes="abundante", seed=1)
+    assert len(deck) == config["tamanho_deck"]
+    assert validar_deck(deck, config) == []
+
+    from cards import Heroi
+
+    herois = [c for c in deck if isinstance(c, Heroi)]
+    assert len(herois) == 10
+    assert any(h.raridade == "comum" for h in herois)  # precisa continuar jogável

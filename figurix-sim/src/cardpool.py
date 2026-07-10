@@ -195,6 +195,14 @@ _ARQUETIPOS = {
     "agro": dict(heroes=34, masters=2, guardians=3, judge=0, items_base=5, locals_base=4),
     "controle": dict(heroes=20, masters=4, guardians=12, judge=1, items_base=6, locals_base=6),
     "combo": dict(heroes=24, masters=2, guardians=4, judge=1, items_base=12, locals_base=5),
+    # arquétipo EXTREMO (propositalmente "insano", não um perfil recomendado
+    # de deck real): aposta o mínimo de heróis possível — só o suficiente
+    # pra sustentar mão inicial/reposição por um tempo — pra abrir espaço
+    # máximo pra mestres/guardiões/juiz/invocação. Serve pra testar o
+    # limite: será que abrir mão de profundidade de heróis (ficar exposto
+    # à espiral de busca/fim de deck mais cedo) compensa a vantagem de
+    # economia de invocações?
+    "hiperinvocacao": dict(heroes=10, masters=4, guardians=14, judge=1, items_base=6, locals_base=6),
 }
 
 # fração do orçamento FLEXÍVEL (itens + locais + invocações) dedicada a

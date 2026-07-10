@@ -27,6 +27,8 @@ class ResumoPartida:
     pontos_b: int
     teve_comeback: bool = False  # vencedor esteve >= limiar de pontos atrás em algum momento
     juiz_papeis: frozenset = frozenset()  # papéis ("A"/"B") que invocaram o Juiz com sucesso
+    espiral_papeis: frozenset = frozenset()  # papéis que caíram na espiral de busca de herói (seção 10)
+    mulligan_desistencia_papeis: frozenset = frozenset()  # papéis que desistiram da mão ao menos 1x
     eventos: dict = field(default_factory=dict)
 
 
@@ -56,6 +58,14 @@ def _juiz_jogado_por(log: list, papel_de) -> frozenset:
     for evento in log:
         if evento.get("acao") == "invocar_juiz" and evento.get("sobreviveu"):
             papeis.add(papel_de(evento["turno_de"]))
+    return frozenset(papeis)
+
+
+def _papeis_com_evento(log: list, papel_de, acao: str, campo_jogador: str) -> frozenset:
+    papeis = set()
+    for evento in log:
+        if evento.get("acao") == acao:
+            papeis.add(papel_de(evento[campo_jogador]))
     return frozenset(papeis)
 
 
@@ -127,6 +137,10 @@ def rodar_torneio(
                 pontos_b=pontos_b,
                 teve_comeback=_teve_comeback(resultado.log, papel_de, vencedor_papel),
                 juiz_papeis=_juiz_jogado_por(resultado.log, papel_de),
+                espiral_papeis=_papeis_com_evento(resultado.log, papel_de, "espiral_step", "turno_de"),
+                mulligan_desistencia_papeis=_papeis_com_evento(
+                    resultado.log, papel_de, "mulligan_desistencia", "jogador"
+                ),
                 eventos=_resumir_eventos(resultado.log),
             )
         )
