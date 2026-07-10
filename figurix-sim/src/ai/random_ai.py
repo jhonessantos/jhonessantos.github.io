@@ -11,5 +11,5 @@ class RandomAI:
     def __init__(self, seed: int | None = None):
         self.rng = random.Random(seed)
 
-    def escolher_acao(self, estado, acoes_legais: list):
+    def escolher_acao(self, estado, jogador_nome: str, acoes_legais: list, config: dict):
         return self.rng.choice(acoes_legais)

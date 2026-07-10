@@ -13,6 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional
 
+import combat
 from cards import (
     Guardiao,
     Heroi,
@@ -25,6 +26,17 @@ from cards import (
     pontos_da_raridade,
     raridade_equivalente,
 )
+
+PODER_POR_TIPO_ATAQUE = {
+    "principal": "poder_principal",
+    "secundario": "poder_secundario",
+    "terciario": "poder_terciario",
+}
+CATEGORIA_POR_TIPO_ATAQUE = {
+    "principal": "categoria_principal",
+    "secundario": "categoria_secundaria",
+    "terciario": "categoria_terciaria",
+}
 
 
 # ------------------------------------------------------------------
@@ -632,3 +644,38 @@ def resolver_oprimidos(heroi: EstadoHeroiCampo, guardiao_ativo: bool, config: di
         dano_convertido = heroi.dano_acumulado_rodada
     heroi.dano_acumulado_rodada = 0
     return dano_convertido
+
+
+# ------------------------------------------------------------------
+# Previsão de resultado de ataque (usada tanto por match.py para resolver
+# o ataque quanto por IAs para decidir se vale a pena atacar)
+# ------------------------------------------------------------------
+
+def prever_resultado_ataque(
+    estado: EstadoPartida, jogador_nome: str, tipo_ataque: str, config: dict
+) -> combat.ResultadoCombate:
+    jogador = estado.jogadores[jogador_nome]
+    adversario_nome = next(n for n in estado.jogadores if n != jogador_nome)
+    adversario = estado.jogadores[adversario_nome]
+
+    atacante_carta = jogador.heroi_ativo.carta
+    defensor_campo = adversario.heroi_ativo
+    poder_base = getattr(atacante_carta, PODER_POR_TIPO_ATAQUE[tipo_ataque])
+    categoria_ataque_usado = getattr(atacante_carta, CATEGORIA_POR_TIPO_ATAQUE[tipo_ataque])
+    local_favorece = estado.local is not None and estado.local.carta.categoria == categoria_ataque_usado
+    mestre_presente = (
+        jogador.mestre is not None and jogador.mestre.carta.tipo_heroi_dominado == atacante_carta.variacao_id
+    )
+    item_anexado = jogador.heroi_ativo.item_anexado is not None
+
+    return combat.resolver_ataque(
+        poder_base=poder_base,
+        tipo_ataque=tipo_ataque,
+        item_anexado=item_anexado,
+        local_favorece_categoria_ataque=local_favorece,
+        mestre_do_tipo_presente=mestre_presente,
+        categoria_heroi_atacante=atacante_carta.categoria_principal,
+        categoria_heroi_defensor=defensor_campo.carta.categoria_principal,
+        categoria_ataque_usado=categoria_ataque_usado,
+        config=config,
+    )

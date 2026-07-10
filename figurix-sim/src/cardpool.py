@@ -224,22 +224,53 @@ def montar_deck(
     pool = CardPool(config, seed=seed)
     cartas: list = []
 
-    # heróis: 1 variação distinta por herói (evita colisão de unicidade)
+    # heróis: gerados como "famílias" de participante (mesma variação/pessoa
+    # em raridades diferentes — seção 2), não heróis isolados.
+    #
+    # Só entram em campo cartas COMUNS (mão inicial e reposição grátis pós-
+    # derrota, seção 3/5); raridades superiores só chegam ao campo via
+    # EVOLUÇÃO (seção 7), que exige ter em mão uma carta rara+ do MESMO
+    # participante. Gerar 1 variação distinta por herói (como numa versão
+    # anterior deste gerador) tornava a evolução matematicamente impossível
+    # em todo deck — as cartas fortes nunca entravam em jogo, e "força" do
+    # deck não tinha efeito nenhum na partida. Por isso toda família começa
+    # com 1 comum (garante que o herói é jogável) e recebe 0-3 cópias extras
+    # em raridades superiores como alvos de evolução, na proporção do
+    # orçamento de força do perfil.
+    n_heroes = contagens["heroes"]
+    # Fração de heróis que são "famílias-base" (1 comum cada); o restante do
+    # orçamento vira cópias de raridade superior desses mesmos participantes
+    # (alvos de evolução). Não reduzimos demais o nº de comuns nem em "forte"
+    # — poucos comuns o suficiente para sustentar mão inicial/reposição é
+    # mais decisivo pro jogo que a diferença bruta de raridade (ver seção 10,
+    # espiral de busca), então a diferenciação de força entre perfis vem
+    # sobretudo de QUANTAS famílias evoluem e a que raridade, não de ter
+    # poucos comuns.
+    fracao_slots = {"fraco": 0.85, "medio": 0.70, "forte": 0.55}[faixa_forca]
+    n_familias = max(1, min(n_heroes, round(n_heroes * fracao_slots)))
+
     variacao_ids = list(range(1, N_VARIACOES_OFICIAIS + 1))
     pool.rng.shuffle(variacao_ids)
-    herois: list = []
-    for i in range(contagens["heroes"]):
-        variacao_id = variacao_ids[i % len(variacao_ids)]
-        raridade = _sortear_raridade(orcamento, pool.rng)
-        herois.append(pool.novo_heroi(raridade, variacao_id=variacao_id))
+    familias: dict[int, set] = {vid: {"comum"} for vid in variacao_ids[:n_familias]}
 
-    # a mão inicial e a reposição de herói derrotado EXIGEM uma carta comum
-    # (seção 3); sem isso o deck é impossível de jogar. Garantimos que todo
-    # deck gerado tenha pelo menos 1 herói comum, mesmo em orçamentos "forte"
-    # onde a raridade comum pode sair sorteada 0 vezes por azar.
-    if not any(h.raridade == "comum" for h in herois):
-        substituto = herois[0]
-        herois[0] = pool.novo_heroi("comum", variacao_id=substituto.variacao_id)
+    raridades_superiores = ["rara", "super_rara", "ultra_rara"]
+    pesos_superiores = [orcamento[r] for r in raridades_superiores]
+    ids_familias = list(familias.keys())
+    cartas_restantes = n_heroes - n_familias
+    tentativas = 0
+    while cartas_restantes > 0 and tentativas < cartas_restantes * 50 + 100:
+        tentativas += 1
+        vid = pool.rng.choice(ids_familias)
+        raridade_alvo = pool.rng.choices(raridades_superiores, weights=pesos_superiores, k=1)[0]
+        if raridade_alvo in familias[vid]:
+            continue
+        familias[vid].add(raridade_alvo)
+        cartas_restantes -= 1
+
+    herois: list = []
+    for vid, raridades_presentes in familias.items():
+        for raridade in raridades_presentes:
+            herois.append(pool.novo_heroi(raridade, variacao_id=vid, participante_id=vid))
 
     cartas.extend(herois)
 

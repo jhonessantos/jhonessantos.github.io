@@ -22,18 +22,6 @@ from dataclasses import dataclass
 import engine as eng
 from cards import Guardiao, Heroi, Juiz, Mestre, duracao_mestre_da_raridade, duracao_portais_da_raridade, pontos_da_raridade
 from chains import ElementoCadeia, pode_barrar, resolver_cadeia
-from combat import resolver_ataque
-
-PODER_POR_TIPO_ATAQUE = {
-    "principal": "poder_principal",
-    "secundario": "poder_secundario",
-    "terciario": "poder_terciario",
-}
-CATEGORIA_POR_TIPO_ATAQUE = {
-    "principal": "categoria_principal",
-    "secundario": "categoria_secundaria",
-    "terciario": "categoria_terciaria",
-}
 
 MAX_TURNOS_SEGURANCA = 1500
 MAX_ACOES_POR_TURNO_SEGURANCA = 200
@@ -46,6 +34,7 @@ class ResultadoPartida:
     turnos: int
     rodadas: int
     pontos: dict
+    primeiro_jogador: str
     log: list
 
 
@@ -129,6 +118,7 @@ def jogar_partida(config: dict, deck1: list, deck2: list, ai1, ai2, nome1="P1", 
         turnos=turnos,
         rodadas=estado.rodada,
         pontos={nome: j.pontos for nome, j in estado.jogadores.items()},
+        primeiro_jogador=estado.ordem_turno[0],
         log=estado.log,
     )
 
@@ -162,7 +152,7 @@ def jogar_turno(estado: eng.EstadoPartida, ais: dict, config: dict, rng: random.
     contadores = {"invocacoes": 0, "locais": 0, "mestres": 0, "juizes": 0, "atacou": False}
     for _ in range(MAX_ACOES_POR_TURNO_SEGURANCA):
         legais = eng.acoes_legais(estado, jogador_nome, contadores, config)
-        acao = ais[jogador_nome].escolher_acao(estado, legais)
+        acao = ais[jogador_nome].escolher_acao(estado, jogador_nome, legais, config)
         if acao.tipo == "passar":
             break
         _aplicar_acao(estado, jogador_nome, adversario_nome, acao, contadores, config, ais, rng)
@@ -214,6 +204,7 @@ def _aplicar_acao(estado, jogador_nome, adversario_nome, acao, contadores, confi
             jogador.descarte.append(estado.local.carta)
         estado.local = eng.EstadoLocal(carta=carta)
         contadores["locais"] += 1
+        eng.registrar_evento(estado, acao="colocar_local", categoria=carta.categoria, raridade=carta.raridade)
         return
 
     if tipo == "anexar_item":
@@ -234,6 +225,7 @@ def _aplicar_acao(estado, jogador_nome, adversario_nome, acao, contadores, confi
         jogador.descarte.append(carta_anterior)
         _descartar_pagamento(jogador, pagamento)
         jogador.heroi_ativo = novo_campo
+        eng.registrar_evento(estado, acao="evoluir", de=carta_anterior.raridade, para=carta_destino.raridade)
         return
 
     if tipo in ("invocar_guardiao", "invocar_mestre", "invocar_juiz"):
@@ -292,10 +284,10 @@ def _resolver_entrada_auxiliar(estado, jogador_nome, adversario_nome, ais, carta
             if isinstance(c, (Guardiao, Mestre, Juiz)) and pode_barrar(c, alvo_atual, config):
                 pagamento = eng.pagar_barragem(resp_estado.invocacoes_em_mesa, c.categoria, config)
                 if pagamento is not None:
-                    opcoes.append(eng.Acao("barrar", {"carta": c, "pagamento": pagamento}))
+                    opcoes.append(eng.Acao("barrar", {"carta": c, "pagamento": pagamento, "alvo": alvo_atual}))
         opcoes.append(eng.Acao("passar_barragem"))
 
-        escolha = ais[respondente].escolher_acao(estado, opcoes)
+        escolha = ais[respondente].escolher_acao(estado, respondente, opcoes, config)
         if escolha.tipo != "barrar":
             break
 
@@ -309,6 +301,9 @@ def _resolver_entrada_auxiliar(estado, jogador_nome, adversario_nome, ais, carta
     dono_por_carta = {id(e.carta): e.jogador for e in pilha}
     for carta in resultado.descartes:
         estado.jogadores[dono_por_carta[id(carta)]].descarte.append(carta)
+
+    if len(pilha) > 1:
+        eng.registrar_evento(estado, acao="barragem_cadeia", profundidade=len(pilha))
 
     return resultado.sobrevivente is not None and resultado.sobrevivente.carta is carta_base
 
@@ -333,6 +328,8 @@ def _aplicar_entrada_guardiao(estado, jogador, carta, config, rng):
             eng.aplicar_descanso(jogador, isca, estado.rodada, config)
         jogador.descarte.append(carta)
 
+    eng.registrar_evento(estado, acao="guardiao_efeito", tipo=carta.tipo)
+
 
 def _escolher_remocao_juiz(jogador, adversario, estado, rng) -> list:
     """Baseline aleatório (50% por carta elegível) — refinável por IAs melhores."""
@@ -349,31 +346,10 @@ def _escolher_remocao_juiz(jogador, adversario, estado, rng) -> list:
 
 def _resolver_ataque_no_turno(estado, jogador_nome, adversario_nome, dados, config):
     jogador = estado.jogadores[jogador_nome]
-    adversario = estado.jogadores[adversario_nome]
     tipo_ataque, pagamento = dados["tipo_ataque"], dados["pagamento"]
+
+    resultado = eng.prever_resultado_ataque(estado, jogador_nome, tipo_ataque, config)
     _descartar_pagamento(jogador, pagamento)
-
-    atacante_carta = jogador.heroi_ativo.carta
-    defensor_campo = adversario.heroi_ativo
-    poder_base = getattr(atacante_carta, PODER_POR_TIPO_ATAQUE[tipo_ataque])
-    categoria_ataque_usado = getattr(atacante_carta, CATEGORIA_POR_TIPO_ATAQUE[tipo_ataque])
-    local_favorece = estado.local is not None and estado.local.carta.categoria == categoria_ataque_usado
-    mestre_presente = (
-        jogador.mestre is not None and jogador.mestre.carta.tipo_heroi_dominado == atacante_carta.variacao_id
-    )
-    item_anexado = jogador.heroi_ativo.item_anexado is not None
-
-    resultado = resolver_ataque(
-        poder_base=poder_base,
-        tipo_ataque=tipo_ataque,
-        item_anexado=item_anexado,
-        local_favorece_categoria_ataque=local_favorece,
-        mestre_do_tipo_presente=mestre_presente,
-        categoria_heroi_atacante=atacante_carta.categoria_principal,
-        categoria_heroi_defensor=defensor_campo.carta.categoria_principal,
-        categoria_ataque_usado=categoria_ataque_usado,
-        config=config,
-    )
     eng.registrar_evento(
         estado, acao="atacar", tipo_ataque=tipo_ataque, multiplo=resultado.multiplo, dano=resultado.dano_final
     )
