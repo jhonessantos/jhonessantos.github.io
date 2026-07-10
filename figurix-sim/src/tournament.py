@@ -25,6 +25,8 @@ class ResumoPartida:
     rodadas: int
     pontos_a: int
     pontos_b: int
+    teve_comeback: bool = False  # vencedor esteve >= limiar de pontos atrás em algum momento
+    juiz_papeis: frozenset = frozenset()  # papéis ("A"/"B") que invocaram o Juiz com sucesso
     eventos: dict = field(default_factory=dict)
 
 
@@ -32,7 +34,7 @@ def _resumir_eventos(log: list) -> dict:
     contagem: dict[str, int] = {}
     for evento in log:
         acao = evento.get("acao")
-        if acao is None:
+        if acao is None or acao == "pontos":
             continue
         if acao == "atacar":
             chave = f"atacar_{evento['tipo_ataque']}"
@@ -47,6 +49,31 @@ def _resumir_eventos(log: list) -> dict:
             chave = acao
         contagem[chave] = contagem.get(chave, 0) + 1
     return contagem
+
+
+def _juiz_jogado_por(log: list, papel_de) -> frozenset:
+    papeis = set()
+    for evento in log:
+        if evento.get("acao") == "invocar_juiz" and evento.get("sobreviveu"):
+            papeis.add(papel_de(evento["turno_de"]))
+    return frozenset(papeis)
+
+
+def _teve_comeback(log: list, papel_de, vencedor_papel: str | None, limiar: int = 4) -> bool:
+    """Métrica 6: o vencedor chegou a estar >= `limiar` pontos atrás?"""
+    if vencedor_papel is None:
+        return False
+    maior_deficit = 0
+    for evento in log:
+        if evento.get("acao") != "pontos":
+            continue
+        pontos_por_papel = {
+            papel_de(fisico): pontos for fisico, pontos in evento.items() if fisico in ("P1", "P2")
+        }
+        pontos_vencedor = pontos_por_papel.get(vencedor_papel, 0)
+        pontos_adversario = sum(v for k, v in pontos_por_papel.items() if k != vencedor_papel)
+        maior_deficit = max(maior_deficit, pontos_adversario - pontos_vencedor)
+    return maior_deficit >= limiar
 
 
 def rodar_torneio(
@@ -88,15 +115,18 @@ def rodar_torneio(
 
         pontos_p1, pontos_p2 = resultado.pontos["P1"], resultado.pontos["P2"]
         pontos_a, pontos_b = (pontos_p1, pontos_p2) if papel_e_p1 == "A" else (pontos_p2, pontos_p1)
+        vencedor_papel = papel_de(resultado.vencedor)
 
         resumos.append(
             ResumoPartida(
-                vencedor_papel=papel_de(resultado.vencedor),
+                vencedor_papel=vencedor_papel,
                 primeiro_papel=papel_de(resultado.primeiro_jogador),
                 turnos=resultado.turnos,
                 rodadas=resultado.rodadas,
                 pontos_a=pontos_a,
                 pontos_b=pontos_b,
+                teve_comeback=_teve_comeback(resultado.log, papel_de, vencedor_papel),
+                juiz_papeis=_juiz_jogado_por(resultado.log, papel_de),
                 eventos=_resumir_eventos(resultado.log),
             )
         )

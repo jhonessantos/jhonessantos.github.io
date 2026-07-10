@@ -86,6 +86,54 @@ def metrica_vantagem_primeiro_jogador(resumos: list[ResumoPartida]) -> dict:
     return {"n_partidas": n, "winrate_primeiro_jogador": winrate}
 
 
+def metrica_skill_gap(resumos: list[ResumoPartida], papel_ia_esperta: str = "A") -> dict:
+    """Métrica 2: MCTS+deck_fraco (papel_ia_esperta) x Heuristic+deck_forte.
+    Se a IA esperta vence >= 45% com cartas piores, estratégia importa —
+    é o teste direto da filosofia de design ("estratégia vale tanto quanto força")."""
+    decididas = [r for r in resumos if r.vencedor_papel is not None]
+    n = len(decididas)
+    vitorias_esperta = sum(1 for r in decididas if r.vencedor_papel == papel_ia_esperta)
+    winrate = vitorias_esperta / n if n else 0.0
+    veredito = "estratégia compensa cartas piores" if winrate >= 0.45 else "cartas mais fortes dominam sobre estratégia"
+    return {"n_partidas": n, "winrate_ia_esperta_com_deck_fraco": winrate, "veredito": veredito}
+
+
+def metrica_fator_juiz(resumos: list[ResumoPartida]) -> dict:
+    """Métrica 4: % de partidas em que o Juiz entra; winrate de quem o joga;
+    % de viradas (comebacks) em que o vencedor jogou o Juiz. Testa a
+    hipótese nº 1 do criador: "Juiz forte demais"."""
+    n = len(resumos)
+    if n == 0:
+        return {}
+    partidas_com_juiz = [r for r in resumos if r.juiz_papeis]
+    pct_partidas_com_juiz = len(partidas_com_juiz) / n
+
+    decididas_com_juiz = [r for r in partidas_com_juiz if r.vencedor_papel is not None]
+    vitorias_de_quem_jogou = sum(1 for r in decididas_com_juiz if r.vencedor_papel in r.juiz_papeis)
+    winrate_de_quem_joga_juiz = (
+        vitorias_de_quem_jogou / len(decididas_com_juiz) if decididas_com_juiz else None
+    )
+
+    viradas = [r for r in resumos if r.teve_comeback and r.vencedor_papel is not None]
+    viradas_com_juiz = sum(1 for r in viradas if r.vencedor_papel in r.juiz_papeis)
+    pct_viradas_iniciadas_pelo_juiz = viradas_com_juiz / len(viradas) if viradas else None
+
+    return {
+        "n_partidas": n,
+        "pct_partidas_com_juiz_em_campo": pct_partidas_com_juiz,
+        "winrate_de_quem_joga_o_juiz": winrate_de_quem_joga_juiz,
+        "pct_viradas_com_juiz_do_lado_vencedor": pct_viradas_iniciadas_pelo_juiz,
+    }
+
+
+def metrica_comebacks(resumos: list[ResumoPartida]) -> dict:
+    """Métrica 6: % de vitórias de quem esteve >= 4 pontos atrás em algum momento."""
+    decididas = [r for r in resumos if r.vencedor_papel is not None]
+    n = len(decididas)
+    comebacks = sum(1 for r in decididas if r.teve_comeback)
+    return {"n_partidas": n, "pct_comebacks": comebacks / n if n else 0.0}
+
+
 def formatar_relatorio_markdown(titulo: str, secoes: dict[str, dict]) -> str:
     linhas = [f"# {titulo}", ""]
     for nome_secao, metricas in secoes.items():
@@ -116,7 +164,8 @@ def salvar_csv_resumos(resumos: list[ResumoPartida], caminho: str | Path) -> Non
     """Dump bruto por partida — insumo para auditoria manual e comparação entre variantes."""
     chaves_eventos = sorted({k for r in resumos for k in r.eventos if not k.startswith("_")})
     campos = [
-        "vencedor_papel", "primeiro_papel", "turnos", "rodadas", "pontos_a", "pontos_b"
+        "vencedor_papel", "primeiro_papel", "turnos", "rodadas", "pontos_a", "pontos_b",
+        "teve_comeback", "juiz_papeis",
     ] + chaves_eventos
 
     with open(caminho, "w", newline="", encoding="utf-8") as f:
@@ -130,6 +179,8 @@ def salvar_csv_resumos(resumos: list[ResumoPartida], caminho: str | Path) -> Non
                 "rodadas": r.rodadas,
                 "pontos_a": r.pontos_a,
                 "pontos_b": r.pontos_b,
+                "teve_comeback": r.teve_comeback,
+                "juiz_papeis": "|".join(sorted(r.juiz_papeis)),
             }
             for chave in chaves_eventos:
                 linha[chave] = r.eventos.get(chave, 0)

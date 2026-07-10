@@ -97,6 +97,7 @@ def _preparar_maos_iniciais(estado, ordem_decisao, titular_inicial, config, rng)
                 outro.mao.append(outro.deck.pop())
             if desistencias[nome] >= 2:
                 outro.pontos += 1
+                _log_pontos(estado)
             if nome == titular and outro_nome in aceitas:
                 titular = outro_nome
 
@@ -108,10 +109,7 @@ def jogar_partida(config: dict, deck1: list, deck2: list, ai1, ai2, nome1="P1", 
     estado = configurar_partida(config, deck1, deck2, nome1, nome2, seed=rng.randrange(2**31))
     ais = {nome1: ai1, nome2: ai2}
 
-    turnos = 0
-    while estado.vencedor is None and turnos < MAX_TURNOS_SEGURANCA:
-        jogar_turno(estado, ais, config, rng)
-        turnos += 1
+    turnos = continuar_partida(estado, ais, config, rng)
 
     return ResultadoPartida(
         vencedor=estado.vencedor,
@@ -121,6 +119,74 @@ def jogar_partida(config: dict, deck1: list, deck2: list, ai1, ai2, nome1="P1", 
         primeiro_jogador=estado.ordem_turno[0],
         log=estado.log,
     )
+
+
+def continuar_partida(
+    estado: eng.EstadoPartida, ais: dict, config: dict, rng: random.Random, max_turnos: int = MAX_TURNOS_SEGURANCA
+) -> int:
+    """Roda `jogar_turno` em loop, mutando `estado` in-place, até a partida
+    terminar ou `max_turnos` ser atingido. Retorna quantos turnos rodou.
+
+    Separado de `jogar_partida` para que o MCTSAI possa clonar um estado
+    em andamento e continuar simulando um rollout a partir dele, sem
+    reconstruir a partida do zero."""
+    turnos = 0
+    while estado.vencedor is None and turnos < max_turnos:
+        jogar_turno(estado, ais, config, rng)
+        turnos += 1
+    return turnos
+
+
+def simular_acao_e_continuar(
+    estado: eng.EstadoPartida,
+    jogador_nome: str,
+    adversario_nome: str,
+    acao_raiz: eng.Acao,
+    contadores: dict,
+    config: dict,
+    ais: dict,
+    rng: random.Random,
+    max_turnos_rollout: int,
+) -> None:
+    """Aplica `acao_raiz` (mutando `estado`), completa o turno corrente com
+    `ais` caso a ação não o encerre, fecha a transição de turno/rodada, e
+    continua a partida com `ais` por até `max_turnos_rollout` turnos.
+
+    Usado pelo MCTSAI: `acao_raiz` é a ação candidata sendo avaliada; o
+    resto do turno e da partida são jogados pela política de rollout
+    (tipicamente HeuristicAI) para estimar o valor dessa escolha.
+
+    Simplificação assumida: `contadores` começa vazio para esta chamada,
+    como se `acao_raiz` fosse a primeira ação do turno — não reflete
+    limites de ação já usados nesta MESMA rodada real antes da decisão
+    (não temos acesso a esse estado interno de dentro de `escolher_acao`).
+    Isso é aceitável para uma busca heurística aproximada.
+    """
+    if acao_raiz.tipo != "passar":
+        _aplicar_acao(estado, jogador_nome, adversario_nome, acao_raiz, contadores, config, ais, rng)
+        if _verificar_fim_de_jogo(estado, config):
+            return
+
+    if acao_raiz.tipo not in ("atacar", "passar"):
+        for _ in range(MAX_ACOES_POR_TURNO_SEGURANCA):
+            legais = eng.acoes_legais(estado, jogador_nome, contadores, config)
+            proxima = ais[jogador_nome].escolher_acao(estado, jogador_nome, legais, config)
+            if proxima.tipo == "passar":
+                break
+            _aplicar_acao(estado, jogador_nome, adversario_nome, proxima, contadores, config, ais, rng)
+            if _verificar_fim_de_jogo(estado, config):
+                return
+            if proxima.tipo == "atacar":
+                break
+
+    if jogador_nome == estado.ordem_turno[1]:
+        estado.rodada += 1
+        _fim_de_rodada(estado, config)
+        if _verificar_fim_de_jogo(estado, config):
+            return
+    estado.turno_de = adversario_nome
+
+    continuar_partida(estado, ais, config, rng, max_turnos=max_turnos_rollout)
 
 
 def jogar_turno(estado: eng.EstadoPartida, ais: dict, config: dict, rng: random.Random) -> str | None:
@@ -141,6 +207,7 @@ def jogar_turno(estado: eng.EstadoPartida, ais: dict, config: dict, rng: random.
     if jogador.heroi_ativo is None and eng.em_busca_de_heroi(jogador):
         espiral = estado.espirais.setdefault(jogador_nome, eng.EstadoEspiral(jogador_em_busca=jogador_nome))
         vencedor = eng.passo_espiral(estado, jogador, adversario, espiral, config)
+        _log_pontos(estado)
         if vencedor:
             return vencedor
         if not eng.em_busca_de_heroi(jogador):
@@ -356,6 +423,12 @@ def _resolver_ataque_no_turno(estado, jogador_nome, adversario_nome, dados, conf
     _aplicar_dano(estado, jogador_nome, adversario_nome, resultado.dano_final, config)
 
 
+def _log_pontos(estado: eng.EstadoPartida) -> None:
+    """Snapshot de pontos após qualquer evento que os altere — insumo para
+    detectar comebacks (métrica 6) e a influência do Juiz (métrica 4)."""
+    eng.registrar_evento(estado, acao="pontos", **{nome: j.pontos for nome, j in estado.jogadores.items()})
+
+
 def _aplicar_dano(estado, atacante_nome, defensor_nome, dano, config):
     atacante = estado.jogadores[atacante_nome]
     defensor = estado.jogadores[defensor_nome]
@@ -388,6 +461,7 @@ def _aplicar_dano(estado, atacante_nome, defensor_nome, dano, config):
         defensor.heroi_ativo = None
         if defensor.descanso is not None and defensor.descanso.heroi_isca is campo:
             defensor.descanso = None
+        _log_pontos(estado)
 
 
 def _fim_de_rodada(estado: eng.EstadoPartida, config: dict):

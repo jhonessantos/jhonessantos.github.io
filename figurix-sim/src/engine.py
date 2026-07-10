@@ -115,6 +115,78 @@ def registrar_evento(estado: EstadoPartida, **campos) -> None:
     estado.log.append(evento)
 
 
+def clonar_estado(estado: EstadoPartida) -> EstadoPartida:
+    """Clone barato de EstadoPartida (seção 2.5 da spec do simulador — usado
+    pelo MCTSAI para simular rollouts). As cartas (Heroi/Mestre/... em
+    cards.py) são dataclasses IMUTÁVEIS — reaproveitamos as mesmas
+    referências em vez de copiá-las com `copy.deepcopy`, que não sabe
+    disso e recursivamente duplicaria tudo (caro, e desnecessário já que
+    nada nelas muda). Só as estruturas de estado MUTÁVEIS (EstadoHeroiCampo,
+    EstadoMestreCampo etc.) precisam de cópia de fato. O log não é
+    copiado — é só histórico para auditoria, não afeta a simulação, e
+    cresce demais em partidas longas para valer a pena duplicar a cada
+    rollout."""
+    return EstadoPartida(
+        jogadores={nome: _clonar_jogador(j) for nome, j in estado.jogadores.items()},
+        local=_clonar_local(estado.local),
+        rodada=estado.rodada,
+        turno_de=estado.turno_de,
+        ordem_turno=list(estado.ordem_turno),
+        vencedor=estado.vencedor,
+        espirais={nome: EstadoEspiral(**vars(e)) for nome, e in estado.espirais.items()},
+        log=[],
+    )
+
+
+def _clonar_heroi_campo(h: Optional[EstadoHeroiCampo]) -> Optional[EstadoHeroiCampo]:
+    return None if h is None else EstadoHeroiCampo(**vars(h))
+
+
+def _clonar_mestre_campo(m: Optional[EstadoMestreCampo]) -> Optional[EstadoMestreCampo]:
+    return None if m is None else EstadoMestreCampo(**vars(m))
+
+
+def _clonar_guardiao_campo(g: EstadoGuardiaoCampo) -> EstadoGuardiaoCampo:
+    return EstadoGuardiaoCampo(**vars(g))
+
+
+def _clonar_local(loc: Optional[EstadoLocal]) -> Optional[EstadoLocal]:
+    return None if loc is None else EstadoLocal(**vars(loc))
+
+
+def _clonar_jogador(j: EstadoJogador) -> EstadoJogador:
+    heroi_ativo_clone = _clonar_heroi_campo(j.heroi_ativo)
+
+    descanso_clone = None
+    if j.descanso is not None:
+        # heroi_isca é o MESMO objeto que heroi_ativo enquanto a isca está em
+        # campo (aplicar_descanso faz jogador.heroi_ativo = estado_isca =
+        # descanso.heroi_isca) — preserva essa identidade no clone, senão
+        # os checks "is" em _aplicar_dano/_fim_de_rodada (que detectam a
+        # isca caindo ou retornando) quebram silenciosamente.
+        heroi_isca_clone = (
+            heroi_ativo_clone if j.descanso.heroi_isca is j.heroi_ativo else _clonar_heroi_campo(j.descanso.heroi_isca)
+        )
+        descanso_clone = EstadoDescanso(
+            heroi_descansando=_clonar_heroi_campo(j.descanso.heroi_descansando),
+            heroi_isca=heroi_isca_clone,
+            rodada_retorno=j.descanso.rodada_retorno,
+        )
+
+    return EstadoJogador(
+        nome=j.nome,
+        mao=list(j.mao),
+        deck=list(j.deck),
+        descarte=list(j.descarte),
+        pontos=j.pontos,
+        heroi_ativo=heroi_ativo_clone,
+        mestre=_clonar_mestre_campo(j.mestre),
+        guardioes=[_clonar_guardiao_campo(g) for g in j.guardioes],
+        descanso=descanso_clone,
+        invocacoes_em_mesa=list(j.invocacoes_em_mesa),
+    )
+
+
 # ------------------------------------------------------------------
 # Evolução de herói (seção 7 / seção 6 caso 5)
 # ------------------------------------------------------------------
