@@ -181,12 +181,30 @@ _ORCAMENTO_RARIDADE = {
     "forte": {"comum": 0.10, "rara": 0.25, "super_rara": 0.30, "ultra_rara": 0.35},
 }
 
-# contagens de carta por tipo (invocações preenchem o restante até tamanho_deck)
+# contagens de HERÓIS/MESTRES/GUARDIÕES/JUIZ por arquétipo — o que define a
+# "identidade" do arquétipo. Itens, locais e invocações são o orçamento
+# FLEXÍVEL (ver _PERFIS_INVOCACAO) — não fixamos invocações aqui porque
+# quanto investir nesse recurso é, em si, uma escolha estratégica de
+# montagem de deck que o simulador precisa poder variar e testar
+# isoladamente (uma partida encosta 1 invocação por vez; um deck "abundante"
+# aposta em ataques fortes recorrentes, um "escasso" aposta em economizar
+# e vencer no desgaste/outras mecânicas — nenhum dos dois é óbvio vencedor
+# até rodar a simulação).
 _ARQUETIPOS = {
-    "balanceado": dict(heroes=28, masters=3, guardians=6, judge=1, items=8, locals=6),
-    "agro": dict(heroes=34, masters=2, guardians=3, judge=0, items=5, locals=4),
-    "controle": dict(heroes=20, masters=4, guardians=12, judge=1, items=6, locals=6),
-    "combo": dict(heroes=24, masters=2, guardians=4, judge=1, items=12, locals=5),
+    "balanceado": dict(heroes=28, masters=3, guardians=6, judge=1, items_base=8, locals_base=6),
+    "agro": dict(heroes=34, masters=2, guardians=3, judge=0, items_base=5, locals_base=4),
+    "controle": dict(heroes=20, masters=4, guardians=12, judge=1, items_base=6, locals_base=6),
+    "combo": dict(heroes=24, masters=2, guardians=4, judge=1, items_base=12, locals_base=5),
+}
+
+# fração do orçamento FLEXÍVEL (itens + locais + invocações) dedicada a
+# invocações — o eixo "economia de invocações" da estratégia de deck
+# (seção 4 do custo de ações: quem tem mais invocação paga mais ataques
+# principal/secundário e barragens; quem tem menos aposta noutra coisa).
+_PERFIS_INVOCACAO = {
+    "escasso": 0.20,
+    "moderado": 0.50,
+    "abundante": 0.80,
 }
 
 
@@ -200,26 +218,52 @@ def montar_deck(
     config: dict,
     faixa_forca: str = "medio",
     arquetipo: str = "balanceado",
+    perfil_invocacoes: str = "moderado",
     seed: int | None = None,
 ) -> list:
     """Monta uma lista de cartas (tamanho_deck cartas) respeitando as regras
     de construção de deck (unicidade de herói, limites de mestre/guardião/juiz).
 
     `faixa_forca`: "fraco" | "medio" | "forte" — orçamento de raridade.
-    `arquetipo`: "balanceado" | "agro" | "controle" | "combo".
+    `arquetipo`: "balanceado" | "agro" | "controle" | "combo" — define
+    heróis/mestres/guardiões/juiz.
+    `perfil_invocacoes`: "escasso" | "moderado" | "abundante" — quanto do
+    orçamento flexível (itens+locais+invocações) vira invocação; o resto
+    se divide entre itens e locais na proporção-base do arquétipo. É um
+    eixo INDEPENDENTE de faixa_forca/arquetipo — dá pra testar, por
+    exemplo, um deck "forte" econômico contra um "fraco" rico em invocação.
     """
     if faixa_forca not in _ORCAMENTO_RARIDADE:
         raise ValueError(f"faixa_forca desconhecida: {faixa_forca!r}")
     if arquetipo not in _ARQUETIPOS:
         raise ValueError(f"arquetipo desconhecido: {arquetipo!r}")
+    if perfil_invocacoes not in _PERFIS_INVOCACAO:
+        raise ValueError(f"perfil_invocacoes desconhecido: {perfil_invocacoes!r}")
 
     orcamento = _ORCAMENTO_RARIDADE[faixa_forca]
-    contagens = dict(_ARQUETIPOS[arquetipo])
+    base = _ARQUETIPOS[arquetipo]
     tamanho_deck = config["tamanho_deck"]
-    fixas = sum(contagens.values())
-    if fixas > tamanho_deck:
+
+    fixas_identidade = base["heroes"] + base["masters"] + base["guardians"] + base["judge"]
+    orcamento_flexivel = tamanho_deck - fixas_identidade
+    if orcamento_flexivel < 0:
         raise ValueError("Contagens do arquétipo excedem tamanho_deck")
-    contagens["invocations"] = tamanho_deck - fixas
+
+    n_invocacoes = round(orcamento_flexivel * _PERFIS_INVOCACAO[perfil_invocacoes])
+    resto = orcamento_flexivel - n_invocacoes
+    razao_items = base["items_base"] / (base["items_base"] + base["locals_base"])
+    n_items = round(resto * razao_items)
+    n_locals = resto - n_items
+
+    contagens = {
+        "heroes": base["heroes"],
+        "masters": base["masters"],
+        "guardians": base["guardians"],
+        "judge": base["judge"],
+        "items": n_items,
+        "locals": n_locals,
+        "invocations": n_invocacoes,
+    }
 
     pool = CardPool(config, seed=seed)
     cartas: list = []
@@ -327,13 +371,19 @@ def montar_deck(
     return cartas
 
 
-def montar_deck_fraco(config: dict, arquetipo: str = "balanceado", seed: int | None = None) -> list:
-    return montar_deck(config, faixa_forca="fraco", arquetipo=arquetipo, seed=seed)
+def montar_deck_fraco(
+    config: dict, arquetipo: str = "balanceado", perfil_invocacoes: str = "moderado", seed: int | None = None
+) -> list:
+    return montar_deck(config, faixa_forca="fraco", arquetipo=arquetipo, perfil_invocacoes=perfil_invocacoes, seed=seed)
 
 
-def montar_deck_medio(config: dict, arquetipo: str = "balanceado", seed: int | None = None) -> list:
-    return montar_deck(config, faixa_forca="medio", arquetipo=arquetipo, seed=seed)
+def montar_deck_medio(
+    config: dict, arquetipo: str = "balanceado", perfil_invocacoes: str = "moderado", seed: int | None = None
+) -> list:
+    return montar_deck(config, faixa_forca="medio", arquetipo=arquetipo, perfil_invocacoes=perfil_invocacoes, seed=seed)
 
 
-def montar_deck_forte(config: dict, arquetipo: str = "balanceado", seed: int | None = None) -> list:
-    return montar_deck(config, faixa_forca="forte", arquetipo=arquetipo, seed=seed)
+def montar_deck_forte(
+    config: dict, arquetipo: str = "balanceado", perfil_invocacoes: str = "moderado", seed: int | None = None
+) -> list:
+    return montar_deck(config, faixa_forca="forte", arquetipo=arquetipo, perfil_invocacoes=perfil_invocacoes, seed=seed)

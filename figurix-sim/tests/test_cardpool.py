@@ -1,6 +1,9 @@
 """Sanidade do gerador de cartas: tudo deve respeitar as faixas do config."""
-from cardpool import CardPool, categorias_da_variacao
-from cards import poderes_da_raridade, pontos_da_raridade, raridade_equivalente
+import pytest
+
+from cardpool import CardPool, categorias_da_variacao, montar_deck
+from cards import Invocacao, poderes_da_raridade, pontos_da_raridade, raridade_equivalente
+from deck import validar_deck
 
 
 def test_forca_heroi_dentro_da_faixa_da_raridade(config):
@@ -49,3 +52,28 @@ def test_item_e_local_apenas_comum_ou_rara(config):
         assert item.raridade in ("comum", "rara")
         local = pool.novo_local()
         assert local.raridade in ("comum", "rara")
+
+
+def _n_invocacoes(deck):
+    return sum(1 for c in deck if isinstance(c, Invocacao))
+
+
+@pytest.mark.parametrize("arquetipo", ["balanceado", "agro", "controle", "combo"])
+def test_perfil_invocacoes_e_um_eixo_independente_e_ordenado(config, arquetipo):
+    """Escasso < moderado < abundante em nº de invocações, com o resto do
+    deck (heróis/mestres/guardiões/juiz) mantido igual — é o eixo de
+    "economia de invocações" da estratégia de deck, testável isoladamente."""
+    escasso = montar_deck(config, faixa_forca="medio", arquetipo=arquetipo, perfil_invocacoes="escasso", seed=1)
+    moderado = montar_deck(config, faixa_forca="medio", arquetipo=arquetipo, perfil_invocacoes="moderado", seed=1)
+    abundante = montar_deck(config, faixa_forca="medio", arquetipo=arquetipo, perfil_invocacoes="abundante", seed=1)
+
+    assert len(escasso) == len(moderado) == len(abundante) == config["tamanho_deck"]
+    assert _n_invocacoes(escasso) < _n_invocacoes(moderado) < _n_invocacoes(abundante)
+
+    for deck in (escasso, moderado, abundante):
+        assert validar_deck(deck, config) == []
+
+
+def test_perfil_invocacoes_invalido_leva_erro(config):
+    with pytest.raises(ValueError):
+        montar_deck(config, perfil_invocacoes="inexistente", seed=1)
