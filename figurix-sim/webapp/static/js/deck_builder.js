@@ -28,6 +28,11 @@ async function iniciar() {
   document.getElementById("select-tipo-carta").onchange = atualizarCamposModal;
   document.getElementById("input-nome-deck").oninput = (e) => (ESTADO.nome = e.target.value);
 
+  document.getElementById("btn-abrir-modal-lote").onclick = () => abrirModalLote(true);
+  document.getElementById("btn-fechar-modal-lote").onclick = () => abrirModalLote(false);
+  document.getElementById("btn-add-linha-lote").onclick = () => adicionarLinhaLote();
+  document.getElementById("btn-gerar-lote").onclick = gerarLote;
+
   renderizarTudo();
 }
 
@@ -38,7 +43,10 @@ function preencherFormularioGeracao() {
 }
 
 function preencherSelect(id, opcoes, comBranco) {
-  const select = document.getElementById(id);
+  preencherSelectEl(document.getElementById(id), opcoes, comBranco);
+}
+
+function preencherSelectEl(select, opcoes, comBranco) {
   select.innerHTML = "";
   if (comBranco) {
     const optBranco = document.createElement("option");
@@ -250,6 +258,158 @@ async function adicionarCartaManual() {
   renderizarGrade();
   revalidar();
   abrirModal(false);
+}
+
+// ---- preenchimento em lote: N regras dinâmicas ("X cartas de Y tipo de Z categoria"),
+// com uma regra opcional que completa o restante do deck automaticamente ----
+
+function abrirModalLote(mostrar) {
+  const modal = document.getElementById("modal-lote");
+  modal.classList.toggle("oculto", !mostrar);
+  if (mostrar && document.querySelectorAll("#linhas-lote .linha-lote").length === 0) {
+    adicionarLinhaLote();
+  }
+}
+
+function adicionarLinhaLote() {
+  const template = document.getElementById("template-linha-lote");
+  const linha = template.content.firstElementChild.cloneNode(true);
+
+  preencherSelectEl(linha.querySelector(".campo-lote-tipo"), Object.keys(CAMPOS_POR_TIPO));
+  preencherSelectEl(linha.querySelector(".campo-lote-raridade"), CATALOGO.raridades, true);
+  preencherSelectEl(linha.querySelector(".campo-lote-raridade_item"), ["comum", "rara"], true);
+  preencherSelectEl(linha.querySelector(".campo-lote-categoria"), CATALOGO.categorias, true);
+  preencherSelectEl(linha.querySelector(".campo-lote-tipo_guardiao"), CATALOGO.tipos_guardiao, true);
+
+  linha.querySelector(".campo-lote-tipo").onchange = () => {
+    atualizarCamposLinha(linha);
+    atualizarResumoLote();
+  };
+  linha.querySelector(".campo-lote-resto").onchange = (e) => {
+    if (e.target.checked) {
+      // só 1 regra de "restante" por vez, pra manter a resolução simples e previsível
+      document.querySelectorAll(".campo-lote-resto").forEach((chk) => {
+        if (chk !== e.target) chk.checked = false;
+      });
+    }
+    atualizarLinhaResto(linha);
+    atualizarResumoLote();
+  };
+  linha.querySelector(".campo-lote-quantidade").oninput = atualizarResumoLote;
+  linha.querySelector(".btn-remover-linha").onclick = () => {
+    linha.remove();
+    atualizarResumoLote();
+  };
+
+  document.getElementById("linhas-lote").appendChild(linha);
+  atualizarCamposLinha(linha);
+  atualizarResumoLote();
+}
+
+function atualizarCamposLinha(linha) {
+  const tipo = linha.querySelector(".campo-lote-tipo").value;
+  const camposAtivos = CAMPOS_POR_TIPO[tipo] || [];
+  for (const bloco of linha.querySelectorAll(".campo-modal")) {
+    bloco.classList.toggle("oculto", !camposAtivos.includes(bloco.dataset.campo));
+  }
+}
+
+function atualizarLinhaResto(linha) {
+  linha.querySelector(".campo-lote-quantidade").disabled = linha.querySelector(".campo-lote-resto").checked;
+}
+
+function lerRegraDaLinha(linha) {
+  const tipo = linha.querySelector(".campo-lote-tipo").value;
+  const lerNumeroEl = (el) => (el.value === "" ? null : parseInt(el.value, 10));
+  const lerTextoEl = (el) => (el.value === "" ? null : el.value);
+
+  const regra = { tipo_carta: tipo };
+  if (tipo === "heroi") {
+    regra.raridade = lerTextoEl(linha.querySelector(".campo-lote-raridade")) || "comum";
+    regra.variacao_id = lerNumeroEl(linha.querySelector(".campo-lote-variacao_id"));
+    regra.participante_id = lerNumeroEl(linha.querySelector(".campo-lote-participante_id"));
+    regra.forca = lerNumeroEl(linha.querySelector(".campo-lote-forca"));
+  } else if (tipo === "mestre") {
+    regra.raridade = lerTextoEl(linha.querySelector(".campo-lote-raridade")) || "comum";
+    regra.tipo_heroi_dominado = lerNumeroEl(linha.querySelector(".campo-lote-tipo_heroi_dominado"));
+    regra.categoria = lerTextoEl(linha.querySelector(".campo-lote-categoria"));
+    regra.forca = lerNumeroEl(linha.querySelector(".campo-lote-forca"));
+  } else if (tipo === "guardiao") {
+    regra.tipo_guardiao = lerTextoEl(linha.querySelector(".campo-lote-tipo_guardiao"));
+    regra.categoria = lerTextoEl(linha.querySelector(".campo-lote-categoria"));
+    regra.raridade = lerTextoEl(linha.querySelector(".campo-lote-raridade"));
+    regra.forca = lerNumeroEl(linha.querySelector(".campo-lote-forca"));
+  } else if (tipo === "juiz") {
+    regra.categoria = lerTextoEl(linha.querySelector(".campo-lote-categoria"));
+    regra.raridade = lerTextoEl(linha.querySelector(".campo-lote-raridade"));
+    regra.forca = lerNumeroEl(linha.querySelector(".campo-lote-forca"));
+  } else if (tipo === "item") {
+    regra.tipo_heroi = lerNumeroEl(linha.querySelector(".campo-lote-tipo_heroi"));
+    regra.raridade = lerTextoEl(linha.querySelector(".campo-lote-raridade_item"));
+  } else if (tipo === "local") {
+    regra.categoria = lerTextoEl(linha.querySelector(".campo-lote-categoria"));
+    regra.raridade = lerTextoEl(linha.querySelector(".campo-lote-raridade_item"));
+  } else if (tipo === "invocacao") {
+    regra.categoria = lerTextoEl(linha.querySelector(".campo-lote-categoria"));
+  }
+
+  return {
+    regra,
+    resto: linha.querySelector(".campo-lote-resto").checked,
+    quantidade: parseInt(linha.querySelector(".campo-lote-quantidade").value, 10) || 0,
+  };
+}
+
+function resolverQuantidadesLote() {
+  const linhas = [...document.querySelectorAll("#linhas-lote .linha-lote")].map(lerRegraDaLinha);
+  const fixas = linhas.filter((l) => !l.resto);
+  const restos = linhas.filter((l) => l.resto);
+
+  const somaFixas = fixas.reduce((acc, l) => acc + Math.max(0, l.quantidade), 0);
+  const tamanhoAlvo = CATALOGO.tamanho_deck;
+  const faltam = Math.max(0, tamanhoAlvo - ESTADO.cartas.length - somaFixas);
+
+  const resolvidas = fixas.filter((l) => l.quantidade > 0).map((l) => ({ ...l.regra, quantidade: l.quantidade }));
+  if (restos.length > 0 && faltam > 0) {
+    resolvidas.push({ ...restos[0].regra, quantidade: faltam });
+  }
+
+  return { resolvidas, somaFixas, faltam, temResto: restos.length > 0, tamanhoAlvo };
+}
+
+function atualizarResumoLote() {
+  const div = document.getElementById("lote-resumo");
+  if (!CATALOGO) return;
+  const { somaFixas, faltam, temResto, tamanhoAlvo } = resolverQuantidadesLote();
+  const totalDepois = ESTADO.cartas.length + somaFixas + (temResto ? faltam : 0);
+
+  let texto = `Deck atual: ${ESTADO.cartas.length} carta(s). Regras fixas somam ${somaFixas}.`;
+  if (temResto) {
+    texto += ` A regra de "restante" vai gerar ${faltam} carta(s).`;
+  }
+  texto += ` Total após gerar: ${totalDepois} / ${tamanhoAlvo}.`;
+
+  div.textContent = texto;
+  div.classList.toggle("completo", totalDepois === tamanhoAlvo);
+  div.classList.toggle("excedente", totalDepois > tamanhoAlvo);
+}
+
+async function gerarLote() {
+  const { resolvidas } = resolverQuantidadesLote();
+  if (resolvidas.length === 0) {
+    alert('Defina ao menos uma regra com quantidade maior que 0 (ou marque "preencher o restante").');
+    return;
+  }
+
+  const resultado = await api("/api/cartas/lote", {
+    method: "POST",
+    body: JSON.stringify({ regras: resolvidas, cartas_existentes: ESTADO.cartas.map((c) => c.serializada) }),
+  });
+  ESTADO.cartas.push(...resultado.cartas);
+  renderizarGrade();
+  revalidar();
+  abrirModalLote(false);
+  document.getElementById("linhas-lote").innerHTML = "";
 }
 
 iniciar();

@@ -19,6 +19,7 @@ from fastapi.responses import FileResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 
+import cartas_lote  # noqa: E402
 import db  # noqa: E402
 from ai.personas_catalogo import listar_ias  # noqa: E402
 from card_view import construir_view_carta, desserializar_carta, serializar_carta  # noqa: E402
@@ -111,38 +112,56 @@ class ParametrosCartaAvulsa(BaseModel):
 def nova_carta(params: ParametrosCartaAvulsa) -> dict:
     pool = CardPool(CONFIG, seed=params.seed)
     try:
-        if params.tipo_carta == "heroi":
-            carta = pool.novo_heroi(
-                params.raridade or "comum",
-                variacao_id=params.variacao_id,
-                participante_id=params.participante_id,
-                forca=params.forca,
-            )
-        elif params.tipo_carta == "mestre":
-            carta = pool.novo_mestre(
-                params.raridade or "comum",
-                tipo_heroi_dominado=params.tipo_heroi_dominado,
-                categoria=params.categoria,
-                forca=params.forca,
-            )
-        elif params.tipo_carta == "guardiao":
-            carta = pool.novo_guardiao(
-                tipo=params.tipo_guardiao, categoria=params.categoria, raridade=params.raridade, forca=params.forca
-            )
-        elif params.tipo_carta == "juiz":
-            carta = pool.novo_juiz(categoria=params.categoria, raridade=params.raridade, forca=params.forca)
-        elif params.tipo_carta == "item":
-            carta = pool.novo_item(tipo_heroi=params.tipo_heroi, raridade=params.raridade)
-        elif params.tipo_carta == "local":
-            carta = pool.novo_local(categoria=params.categoria, raridade=params.raridade)
-        elif params.tipo_carta == "invocacao":
-            carta = pool.nova_invocacao(categoria=params.categoria)
-        else:
-            raise HTTPException(status_code=400, detail=f"tipo_carta desconhecido: {params.tipo_carta!r}")
+        carta = cartas_lote.gerar_uma_carta(pool, params)
     except (ValueError, KeyError) as e:
         raise HTTPException(status_code=400, detail=str(e))
 
     return {"view": construir_view_carta(carta, CONFIG), "serializada": serializar_carta(carta)}
+
+
+class RegraCartaLote(BaseModel):
+    quantidade: int = 1
+    tipo_carta: str
+    raridade: Optional[str] = None
+    categoria: Optional[str] = None
+    variacao_id: Optional[int] = None
+    participante_id: Optional[int] = None
+    tipo_heroi_dominado: Optional[int] = None
+    tipo_guardiao: Optional[str] = None
+    tipo_heroi: Optional[int] = None
+    forca: Optional[int] = None
+
+
+class LoteCartasEntrada(BaseModel):
+    regras: list[RegraCartaLote]
+    cartas_existentes: list[dict[str, Any]] = []
+    seed: Optional[int] = None
+
+
+@app.post("/api/cartas/lote")
+def gerar_cartas_lote(entrada: LoteCartasEntrada) -> dict:
+    """Preenchimento em lote do deck builder: N regras do tipo "X cartas de
+    Y tipo com Z filtro", geradas em sequência a partir de UM pool com seed
+    compartilhada (reprodutível como o resto do simulador). A resolução de
+    "quantas cartas cada regra deve gerar" (incl. a regra de "preencher o
+    restante do deck") é decidida no frontend, que é quem sabe o tamanho
+    atual do deck em edição — aqui só executamos as quantidades já resolvidas.
+
+    `cartas_existentes`: cartas já no deck em edição (serializadas) — usadas
+    só para inicializar o controle de variações de herói já ocupadas, para
+    que o lote gerado não duplique um herói que o usuário já colocou manual
+    ou parametricamente antes de abrir esta ferramenta.
+    """
+    try:
+        cartas_geradas = cartas_lote.gerar_lote(CONFIG, entrada.regras, entrada.cartas_existentes, entrada.seed)
+    except (ValueError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return {
+        "cartas": [
+            {"view": construir_view_carta(c, CONFIG), "serializada": serializar_carta(c)} for c in cartas_geradas
+        ]
+    }
 
 
 # ------------------------------------------------------------------

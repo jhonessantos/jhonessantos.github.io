@@ -40,6 +40,7 @@
 
       <h2 style="margin-top:24px">Adicionar carta manual</h2>
       <button id="btn-abrir-modal-carta" class="secundario">+ Adicionar carta específica</button>
+      <button id="btn-abrir-modal-lote" class="secundario">▦ Preencher em lote</button>
     </div>
 
     <!-- centro: cartas do deck atual -->
@@ -111,6 +112,75 @@
       <button id="btn-fechar-modal" class="secundario">Cancelar</button>
     </div>
   </div>
+
+  <!-- modal: preenchimento em lote (N regras "X cartas de Y tipo de Z categoria") -->
+  <div class="modal-fundo oculto" id="modal-lote">
+    <div class="modal modal-largo">
+      <h3>Preencher em lote</h3>
+      <p class="modal-explicacao">
+        Defina quantas regras quiser — cada uma gera "X cartas de determinado tipo/categoria/raridade".
+        Marque <strong>uma</strong> regra como "preencher o restante" para completar o deck
+        automaticamente até o tamanho oficial, não importa quantas regras fixas você já tenha definido.
+      </p>
+
+      <div id="linhas-lote"></div>
+      <button id="btn-add-linha-lote" class="secundario">+ Adicionar regra</button>
+
+      <div class="lote-resumo" id="lote-resumo"></div>
+
+      <button id="btn-gerar-lote">Gerar e adicionar ao deck</button>
+      <button id="btn-fechar-modal-lote" class="secundario">Cancelar</button>
+    </div>
+  </div>
+
+  <template id="template-linha-lote">
+    <div class="linha-lote">
+      <div class="linha-lote-topo">
+        <input type="number" class="campo-lote-quantidade" value="1" min="1" style="width:70px" />
+        <select class="campo-lote-tipo" style="flex:1"></select>
+        <label class="linha-lote-resto"><input type="checkbox" class="campo-lote-resto" /> preencher o restante</label>
+        <button class="btn-remover-linha perigo" type="button">✕</button>
+      </div>
+      <div class="linha-lote-campos">
+        <div class="campo-modal" data-campo="raridade">
+          <label>Raridade</label>
+          <select class="campo-lote-raridade"></select>
+        </div>
+        <div class="campo-modal" data-campo="raridade_item">
+          <label>Raridade (comum/rara)</label>
+          <select class="campo-lote-raridade_item"></select>
+        </div>
+        <div class="campo-modal" data-campo="categoria">
+          <label>Categoria</label>
+          <select class="campo-lote-categoria"></select>
+        </div>
+        <div class="campo-modal" data-campo="tipo_guardiao">
+          <label>Tipo de guardião</label>
+          <select class="campo-lote-tipo_guardiao"></select>
+        </div>
+        <div class="campo-modal" data-campo="variacao_id">
+          <label>Variação (1-105, vazio = aleatório)</label>
+          <input type="number" class="campo-lote-variacao_id" min="1" max="105" />
+        </div>
+        <div class="campo-modal" data-campo="participante_id">
+          <label>Participante (vazio = mesmo da variação)</label>
+          <input type="number" class="campo-lote-participante_id" min="1" max="105" />
+        </div>
+        <div class="campo-modal" data-campo="tipo_heroi_dominado">
+          <label>Herói dominado (variação 1-105)</label>
+          <input type="number" class="campo-lote-tipo_heroi_dominado" min="1" max="105" />
+        </div>
+        <div class="campo-modal" data-campo="tipo_heroi">
+          <label>Herói vinculado (variação 1-105)</label>
+          <input type="number" class="campo-lote-tipo_heroi" min="1" max="105" />
+        </div>
+        <div class="campo-modal" data-campo="forca">
+          <label>Força (vazio = aleatória na faixa da raridade)</label>
+          <input type="number" class="campo-lote-forca" />
+        </div>
+      </div>
+    </div>
+  </template>
 
   <script src="/static/js/cards.js"></script>
   <script src="/static/js/deck_builder.js"></script>
