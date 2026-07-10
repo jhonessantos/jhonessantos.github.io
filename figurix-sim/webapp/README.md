@@ -4,19 +4,24 @@ Ambiente gráfico local para o simulador Figurix Card Game. Roda um servidor
 web na sua máquina (`localhost`) — você abre no navegador, sem precisar
 subir nada em nuvem.
 
-## Fase atual: Deck Builder
+## O que já tem
 
-- Gera decks por parâmetros (faixa de força / arquétipo / perfil de
-  invocações) e mostra o resultado como cartas visuais.
-- Permite editar manualmente: adicionar uma carta específica (herói de uma
-  variação/raridade exata, guardião de um tipo específico, etc.) ou remover
-  qualquer carta do deck.
-- Salva decks num banco local (SQLite, arquivo único em `webapp/data/figurix.db`)
-  para você acumular sua biblioteca de decks.
+- **Deck Builder** (`/`): gera decks por parâmetros (faixa de força /
+  arquétipo / perfil de invocações), edita manualmente carta por carta, e
+  tem um **preenchimento em lote** por regras dinâmicas ("X cartas de tipo
+  Y de categoria Z" + uma regra opcional de "misto balanceado" que completa
+  o resto do deck sozinha) — inclusive com estratégias predefinidas
+  salváveis. Decks ficam num banco local (SQLite).
+- **IAs** (`/ias`): catálogo com 20 personalidades de IA (2 baselines + 15
+  personas parametrizáveis + 3 variantes de MCTS).
+- **Regras** (`/regras`): enciclopédia de cada tipo de carta + tutorial
+  passo a passo de como jogar — todos os números vêm do config oficial.
+- **Simulações** (`/simulacoes`): motor de simulação em massa — escolhe IA
+  A/B, deck A/B, quantas partidas, e roda em segundo plano (dá pra rodar
+  milhares/milhões de partidas e ver o progresso/resultado depois).
 
-As próximas fases (rodar simulações em massa, navegar replays partida a
-partida, dashboard de estatísticas, jogar contra a IA) ainda não estão
-prontas — ver `figurix-sim` no rastreador de tarefas da sessão.
+Próximas fases (replay passo a passo, dashboard de estatísticas, jogar
+contra a IA) ainda não estão prontas.
 
 ## Como rodar na sua máquina
 
