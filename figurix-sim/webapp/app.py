@@ -19,6 +19,7 @@ from fastapi.staticfiles import StaticFiles  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 
 import db  # noqa: E402
+from ai.personas_catalogo import listar_ias  # noqa: E402
 from card_view import construir_view_carta, desserializar_carta, serializar_carta  # noqa: E402
 from cardpool import CardPool, N_VARIACOES_OFICIAIS, montar_deck  # noqa: E402
 from config import carregar_config  # noqa: E402
@@ -50,6 +51,11 @@ def catalogo() -> dict:
         "perfis_invocacao": ["escasso", "moderado", "abundante"],
         "faixas_forca": ["fraco", "medio", "forte"],
     }
+
+
+@app.get("/api/ias")
+def ias() -> list[dict]:
+    return listar_ias()
 
 
 # ------------------------------------------------------------------
@@ -232,3 +238,8 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 @app.get("/")
 def index():
     return FileResponse(str(STATIC_DIR / "deck_builder.html"))
+
+
+@app.get("/ias")
+def pagina_ias():
+    return FileResponse(str(STATIC_DIR / "ias.html"))

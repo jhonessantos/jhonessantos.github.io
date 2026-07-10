@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <title>Figurix Studio — Catálogo de IAs</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+  <style>
+    .grade-ias {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 14px;
+    }
+    .card-ia {
+      background: var(--bg-painel-2);
+      border: 1px solid var(--borda);
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+    .card-ia .categoria {
+      display: inline-block;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 2px 8px;
+      border-radius: 999px;
+      margin-bottom: 8px;
+    }
+    .categoria.baseline { background: #374151; color: #d1d5db; }
+    .categoria.persona { background: #1e3a8a; color: #bfdbfe; }
+    .categoria.mcts { background: #581c87; color: #e9d5ff; }
+    .card-ia h3 { margin: 0 0 6px 0; font-size: 15px; }
+    .card-ia p { margin: 0; font-size: 12.5px; color: var(--texto-fraco); line-height: 1.4; }
+    .card-ia .chave { font-size: 10.5px; color: #6b7280; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <header class="topo">
+    <h1>🃏 Figurix Studio</h1>
+    <nav>
+      <a href="/">Deck Builder</a>
+      <a class="ativo" href="/ias">IAs</a>
+      <a href="#" title="em breve">Simulações</a>
+      <a href="#" title="em breve">Replay</a>
+      <a href="#" title="em breve">Estatísticas</a>
+      <a href="#" title="em breve">Jogar</a>
+    </nav>
+  </header>
+
+  <div style="padding: 20px">
+    <div class="painel" style="margin-bottom:16px">
+      <h2>Catálogo de IAs</h2>
+      <p style="color:var(--texto-fraco); font-size:13px; margin:0">
+        Todas prontas para escolher quando o motor de simulações (próxima fase) estiver no ar —
+        aqui você já pode ver a personalidade de cada uma.
+      </p>
+    </div>
+    <div class="grade-ias" id="grade-ias"></div>
+  </div>
+
+  <script>
+    async function iniciar() {
+      const ias = await fetch("/api/ias").then((r) => r.json());
+      const grade = document.getElementById("grade-ias");
+      for (const ia of ias) {
+        const div = document.createElement("div");
+        div.className = "card-ia";
+        div.innerHTML = `
+          <span class="categoria ${ia.categoria}">${ia.categoria}</span>
+          <h3>${ia.rotulo}</h3>
+          <p>${ia.descricao}</p>
+          <div class="chave">chave: ${ia.chave}</div>
+        `;
+        grade.appendChild(div);
+      }
+    }
+    iniciar();
+  </script>
+</body>
+</html>
