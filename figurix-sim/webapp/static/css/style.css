@@ -183,6 +183,17 @@ button.perigo {
   color: gold;
 }
 
+.carta .carta-raridade-badge {
+  position: absolute;
+  bottom: 4px;
+  left: 6px;
+  font-size: 11px;
+  line-height: 1;
+  background: rgba(0,0,0,0.35);
+  border-radius: 4px;
+  padding: 1px 3px;
+}
+
 .carta-invocacao {
   border-width: 0;
   justify-content: center;

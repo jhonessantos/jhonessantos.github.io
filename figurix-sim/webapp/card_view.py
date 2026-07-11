@@ -57,6 +57,17 @@ RARIDADE_COR = {
     "ultra_rara": "#f59e0b",
 }
 
+# símbolo de forma (não só cor) pra cada raridade — círculo/losango/estrela/
+# fogo, pra distinguir raridade mesmo sem depender de cor (ex.: daltonismo).
+# Especiais usam o símbolo da raridade equivalente (são a mesma coisa
+# mecanicamente — seção 1 das regras).
+RARIDADE_EMOJI = {
+    "comum": "⚪",
+    "rara": "🔷",
+    "super_rara": "⭐",
+    "ultra_rara": "🔥",
+}
+
 _TIPO_PARA_LETRA = {
     Heroi: "H",
     Mestre: "M",
@@ -82,6 +93,11 @@ def _cor_raridade(raridade: str, config: dict) -> str:
     return RARIDADE_COR[base]
 
 
+def _emoji_raridade(raridade: str, config: dict) -> str:
+    base = raridade_equivalente(raridade, config)
+    return RARIDADE_EMOJI[base]
+
+
 def construir_view_carta(carta, config: dict) -> dict:
     """Constrói o view model de UMA carta para o frontend renderizar."""
     view = {
@@ -93,6 +109,7 @@ def construir_view_carta(carta, config: dict) -> dict:
         "nome": None,
         "raridade": None,
         "cor_raridade": None,
+        "raridade_emoji": None,
         "especial": False,
         "forca": None,
         "extra": {},
@@ -105,6 +122,7 @@ def construir_view_carta(carta, config: dict) -> dict:
             nome=nome_participante(carta.participante_id),
             raridade=carta.raridade,
             cor_raridade=_cor_raridade(carta.raridade, config),
+            raridade_emoji=_emoji_raridade(carta.raridade, config),
             especial=eh_especial(carta.raridade, config),
             forca=carta.forca_impressa,
             extra={
@@ -124,6 +142,7 @@ def construir_view_carta(carta, config: dict) -> dict:
             nome=nome_mestre(carta.tipo_heroi_dominado),
             raridade=carta.raridade,
             cor_raridade=_cor_raridade(carta.raridade, config),
+            raridade_emoji=_emoji_raridade(carta.raridade, config),
             especial=eh_especial(carta.raridade, config),
             forca=carta.forca_impressa,
             extra={"tipo_heroi_dominado": carta.tipo_heroi_dominado, "categoria": carta.categoria},
@@ -135,6 +154,7 @@ def construir_view_carta(carta, config: dict) -> dict:
             nome=nome_guardiao(carta.tipo),
             raridade=carta.raridade,
             cor_raridade=_cor_raridade(carta.raridade, config),
+            raridade_emoji=_emoji_raridade(carta.raridade, config),
             especial=eh_especial(carta.raridade, config),
             forca=carta.forca_impressa,
             extra={"tipo_guardiao": carta.tipo, "categoria": carta.categoria},
@@ -146,6 +166,7 @@ def construir_view_carta(carta, config: dict) -> dict:
             nome="Juiz",
             raridade=carta.raridade,
             cor_raridade=_cor_raridade(carta.raridade, config),
+            raridade_emoji=_emoji_raridade(carta.raridade, config),
             especial=eh_especial(carta.raridade, config),
             forca=carta.forca_impressa,
             extra={"categoria": carta.categoria},
@@ -158,6 +179,7 @@ def construir_view_carta(carta, config: dict) -> dict:
             nome=nome_item(carta.tipo_heroi),
             raridade=carta.raridade,
             cor_raridade=_cor_raridade(carta.raridade, config),
+            raridade_emoji=_emoji_raridade(carta.raridade, config),
             extra={"tipo_heroi": carta.tipo_heroi},
         )
     elif isinstance(carta, Local):
@@ -166,6 +188,7 @@ def construir_view_carta(carta, config: dict) -> dict:
             cor_categoria=CATEGORIA_COR[carta.categoria],
             raridade=carta.raridade,
             cor_raridade=_cor_raridade(carta.raridade, config),
+            raridade_emoji=_emoji_raridade(carta.raridade, config),
             extra={"categoria": carta.categoria},
         )
     elif isinstance(carta, Invocacao):

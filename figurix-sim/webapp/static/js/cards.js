@@ -19,12 +19,14 @@ function criarElementoCarta(carta, opcoes) {
   } else if (view.tipo_carta === "local") {
     div.style.borderColor = view.cor_raridade || "#666";
     div.innerHTML = `
+      ${raridadeBadge(view)}
       <span class="carta-emoji">${view.emoji}</span>
       <span class="carta-letra">${view.letra}</span>
     `;
   } else if (view.tipo_carta === "item") {
     div.style.borderColor = view.cor_raridade || "#666";
     div.innerHTML = `
+      ${raridadeBadge(view)}
       <div class="carta-emoji-linha">
         <span class="carta-letra">${view.letra}</span>
         <span class="carta-emoji">${view.emoji}</span>
@@ -37,6 +39,7 @@ function criarElementoCarta(carta, opcoes) {
     div.innerHTML = `
       ${view.forca !== null ? `<div class="carta-forca">${view.forca}</div>` : ""}
       ${view.especial ? `<div class="carta-especial-badge">★</div>` : ""}
+      ${raridadeBadge(view)}
       <div class="carta-emoji-linha">
         <span class="carta-emoji">${view.emoji}</span>
         <span class="carta-letra">${view.letra}</span>
@@ -61,6 +64,10 @@ function criarElementoCarta(carta, opcoes) {
   }
 
   return div;
+}
+
+function raridadeBadge(view) {
+  return view.raridade_emoji ? `<div class="carta-raridade-badge">${view.raridade_emoji}</div>` : "";
 }
 
 function tituloCarta(view) {
