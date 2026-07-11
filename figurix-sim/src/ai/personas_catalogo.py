@@ -23,7 +23,8 @@ PERSONAS: dict[str, dict] = {
     "agressiva": {
         "rotulo": "Agressiva",
         "descricao": "Ataca sempre que possível, mesmo sem matar, antes de se preocupar "
-        "com montagem. Quase nunca barra (prefere gastar invocação atacando).",
+        "com montagem. Quase nunca barra (prefere gastar invocação atacando). Aceita "
+        "qualquer mão inicial válida, sem exigência (quer entrar em jogo rápido).",
         "parametros": {
             "ordem_prioridades": [
                 "repor_heroi", "acumular_invocacao", "ataque_letal", "ataque_nao_letal",
@@ -32,6 +33,7 @@ PERSONAS: dict[str, dict] = {
             ],
             "limiar_barragem_forca": 320,
             "limiar_juiz": 150,
+            "mao_exigente": False,
         },
     },
     "defensiva": {
@@ -101,7 +103,8 @@ PERSONAS: dict[str, dict] = {
     "gastadora": {
         "rotulo": "Gastadora (Impulsiva)",
         "descricao": "Nunca acumula invocação de propósito — ataca com o que tiver "
-        "assim que possível, sem esperar montar recurso.",
+        "assim que possível, sem esperar montar recurso. Aceita qualquer mão inicial "
+        "válida, sem exigência.",
         "parametros": {
             "ordem_prioridades": [
                 "repor_heroi", "ataque_letal", "ataque_nao_letal", "evoluir",
@@ -109,6 +112,7 @@ PERSONAS: dict[str, dict] = {
                 "guardiao_util", "acumular_invocacao",
             ],
             "reserva_alvo_invocacoes": 0,
+            "mao_exigente": False,
         },
     },
     "guardia": {
@@ -158,10 +162,12 @@ PERSONAS: dict[str, dict] = {
     "rush_pontos": {
         "rotulo": "Rush de Pontos",
         "descricao": "Nunca perde turno com evolução/mestre/local/item/guardião — só "
-        "repõe herói, guarda o mínimo de invocação e ataca sempre que possível.",
+        "repõe herói, guarda o mínimo de invocação e ataca sempre que possível. Aceita "
+        "qualquer mão inicial válida, sem exigência.",
         "parametros": {
             "ordem_prioridades": ["repor_heroi", "acumular_invocacao", "ataque_letal", "ataque_nao_letal", "juiz_vantagem"],
             "reserva_alvo_invocacoes": 4,
+            "mao_exigente": False,
         },
     },
     "randomica_com_vies": {

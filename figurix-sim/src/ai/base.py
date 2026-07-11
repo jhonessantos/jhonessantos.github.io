@@ -17,3 +17,10 @@ from typing import Protocol
 class AI(Protocol):
     def escolher_acao(self, estado, jogador_nome: str, acoes_legais: list, config: dict):
         ...
+
+    def aceitar_mao(self, mao: list, jogador_nome: str, config: dict) -> bool:
+        """Seção 3.4: aceita a mão inicial (True) ou recusa e pede outra
+        (False). Só é chamada para mãos já VÁLIDAS (com herói comum) — uma
+        mão sem herói comum é sempre recusada automaticamente pelo motor,
+        sem consultar a IA."""
+        ...

@@ -46,6 +46,7 @@ PARAMETROS_PADRAO = {
     "vies_comeback": False,  # baixa os limiares (mais agressivo) quando está perdendo
     "limiar_comeback_pontos": 2,  # diferença de pontos a partir da qual o viés liga
     "aleatoriedade": 0.0,  # chance de ignorar a estratégia e jogar uma ação aleatória
+    "mao_exigente": True,  # seção 3.4: recusa mão válida mas fraca (sem invocação nem herói forte)?
 }
 
 _TIPO_PARA_NOME_CLASSE = {Guardiao: "Guardiao", Mestre: "Mestre", Juiz: "Juiz"}
@@ -74,6 +75,11 @@ class PersonaAI:
         if self.p["aleatoriedade"] > 0 and self.rng.random() < self.p["aleatoriedade"]:
             return self.rng.choice(acoes_legais)
         return self._decidir_turno(estado, jogador_nome, acoes_legais, config)
+
+    def aceitar_mao(self, mao: list, jogador_nome: str, config: dict) -> bool:
+        if not self.p["mao_exigente"]:
+            return True
+        return eng.mao_aceitavel_por_heuristica_padrao(mao)
 
     # ------------------------------------------------------------------
     # Barragem

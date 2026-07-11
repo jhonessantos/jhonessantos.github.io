@@ -82,6 +82,12 @@ class MCTSAI:
         melhor = max(range(n), key=lambda k: (visitas[k], media(k)))
         return candidatos[melhor]
 
+    def aceitar_mao(self, mao: list, jogador_nome: str, config: dict) -> bool:
+        # decisão binária pré-jogo, sem estado de tabuleiro pra simular
+        # rollout em cima — busca completa seria overkill aqui, delegamos
+        # pra mesma heurística usada na política de rollout.
+        return self.rollout_ai.aceitar_mao(mao, jogador_nome, config)
+
     def _selecionar_braco(self, visitas: list[int], soma_valor: list[float]) -> int:
         total = sum(visitas)
         nao_visitados = [i for i, v in enumerate(visitas) if v == 0]

@@ -377,78 +377,67 @@ def resolver_retorno_descanso(
 
 
 # ------------------------------------------------------------------
-# Mulligan (seção 3 / seção 6 caso 8)
+# Mulligan (seção 3, itens 3-5 e seção 3.4 / seção 6 caso 8)
 # ------------------------------------------------------------------
 
-@dataclass
-class ResultadoMulligan:
-    maos_finais: dict  # nome -> list[Carta]
-    titular_prioridade: str
-    pontos: dict  # nome -> pontos ganhos por desistências alheias
-    compras_extra: dict  # nome -> compras extras ganhas
-
-
-def _tem_heroi_comum(mao: list) -> bool:
+def tem_heroi_comum(mao: list) -> bool:
     return any(isinstance(c, Heroi) and c.raridade == "comum" for c in mao)
 
 
-def resolver_mulligan(
-    jogadores_e_maos: list[tuple[str, list]],
-    ordem_decisao: list[str],
-    titular_inicial: str,
-    decisoes: dict,
+def mao_aceitavel_por_heuristica_padrao(mao: list) -> bool:
+    """Critério padrão de aceite de mão (seção 3.4 — recusa VOLUNTÁRIA de
+    mão tecnicamente válida): recusa uma mão que tem herói comum mas
+    nenhum outro recurso à vista (nem invocação pra pagar nada, nem herói
+    de raridade maior como alvo de evolução). É comportamento de IA, não
+    regra de jogo — por isso não usa nenhum valor de config; usado por
+    HeuristicAI, MCTSAI e por qualquer persona que não sobrescreva o
+    critério (parâmetro `mao_exigente` de PersonaAI)."""
+    tem_invocacao = any(isinstance(c, Invocacao) for c in mao)
+    tem_heroi_forte = any(isinstance(c, Heroi) and c.raridade != "comum" for c in mao)
+    return tem_invocacao or tem_heroi_forte
+
+
+@dataclass
+class ConsequenciaDecisaoMulligan:
+    titular_prioridade: str
+    compra_bonus_para: Optional[str] = None
+    ponto_para: Optional[str] = None
+
+
+def registrar_decisao_mulligan(
+    nome: str,
+    outro_nome: str,
+    outro_ja_aceitou: bool,
+    titular_atual: str,
+    desistencias_nome: int,
     config: dict,
-) -> ResultadoMulligan:
-    """Resolve a sequência de aceite/desistência de mão (seção 3, itens 3-5).
+) -> ConsequenciaDecisaoMulligan:
+    """Consequências de UMA rejeição de mão — só chamado quando `nome`
+    acabou de recusar a mão que acabou de comprar (aceitar não tem
+    consequência nenhuma pro outro jogador).
 
-    `ordem_decisao`: [perdedor_par_ou_impar, vencedor] — o vencedor do par
-    ou ímpar pergunta primeiro ao ADVERSÁRIO (perdedor) se mantém a mão,
-    então decide a sua própria (seção 3, item 5).
-    `titular_inicial`: quem detém a prioridade no início (o vencedor).
-    `decisoes`: nome -> lista de bools na ordem das tentativas desse jogador
-    (True = mantém a mão atual; False = desiste e pede nova mão). A função
-    para no primeiro True de cada jogador (mão aceita é definitiva).
-
-    Regras aplicadas:
-      - Sem herói comum ou desistência voluntária -> nova mão + adversário
-        ganha +1 compra; da 2ª desistência em diante, +1 ponto também.
-      - Se o perdedor mantém e o vencedor (titular) desiste depois,
-        a titularidade da prioridade vira para o perdedor.
+    Regras (seção 3, itens 3-5):
+      - Se o outro jogador AINDA não aceitou a dele (também está decidindo
+        ou também acabou de recusar nesta mesma rodada), ninguém é
+        premiado agora — a compensação existe só para quem MANTÉM a mão
+        enquanto o outro desiste, não quando os dois desistem juntos.
+      - Senão (o outro já tem mão aceita), o outro ganha +1 compra; a
+        partir da 2ª desistência CONSECUTIVA de `nome`, o outro também
+        ganha +1 ponto.
+      - Se quem recusou é o titular da prioridade (o vencedor do par ou
+        ímpar, ou quem herdou a titularidade depois) e o outro já tinha
+        aceitado, a titularidade vira para o outro — "a partir daí é como
+        se o perdedor fosse quem tivesse ganho no par ou ímpar".
     """
-    maos = {nome: list(mao) for nome, mao in jogadores_e_maos}
-    pontos = {nome: 0 for nome, _ in jogadores_e_maos}
-    compras_extra = {nome: 0 for nome, _ in jogadores_e_maos}
-    desistencias = {nome: 0 for nome, _ in jogadores_e_maos}
-    titular_prioridade = titular_inicial
+    if not outro_ja_aceitou:
+        return ConsequenciaDecisaoMulligan(titular_prioridade=titular_atual)
 
-    aceitou = {nome: False for nome, _ in jogadores_e_maos}
-    ordem_atual = list(ordem_decisao)
-
-    while not all(aceitou.values()):
-        for nome in ordem_atual:
-            if aceitou[nome]:
-                continue
-            historico = decisoes.get(nome, [])
-            idx = desistencias[nome]
-            mantem = historico[idx] if idx < len(historico) else True
-            if mantem:
-                aceitou[nome] = True
-            else:
-                desistencias[nome] += 1
-                outro = next(n for n in maos if n != nome)
-                compras_extra[outro] += 1
-                if desistencias[nome] >= 2:
-                    pontos[outro] += 1
-                # se quem desistiu era o titular da prioridade e o outro já
-                # havia aceitado antes, a titularidade vira.
-                if nome == titular_prioridade and aceitou[outro]:
-                    titular_prioridade = outro
-
-    return ResultadoMulligan(
-        maos_finais=maos,
-        titular_prioridade=titular_prioridade,
-        pontos=pontos,
-        compras_extra=compras_extra,
+    novo_titular = outro_nome if nome == titular_atual else titular_atual
+    ponto_para = outro_nome if desistencias_nome >= 2 else None
+    return ConsequenciaDecisaoMulligan(
+        titular_prioridade=novo_titular,
+        compra_bonus_para=outro_nome,
+        ponto_para=ponto_para,
     )
 
 
@@ -479,7 +468,7 @@ class EstadoEspiral:
 
 
 def em_busca_de_heroi(jogador: EstadoJogador) -> bool:
-    return jogador.heroi_ativo is None and not _tem_heroi_comum(jogador.mao)
+    return jogador.heroi_ativo is None and not tem_heroi_comum(jogador.mao)
 
 
 def passo_espiral(

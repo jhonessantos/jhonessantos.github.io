@@ -5,8 +5,6 @@ Orquestra engine.py (estado + regras), combat.py (dano) e chains.py
 
 Simplificações de escopo assumidas nesta integração (documentadas para
 os relatórios de milestone):
-  - Recusa voluntária de mão aceitável (seção 3.4) não é simulada: um
-    jogador só faz mulligan quando a mão não tem herói comum algum.
   - A carta inicial (herói comum) e a isca do Guardião do Descanso são
     escolhidas aleatoriamente, não estrategicamente — refinável nas IAs
     de nível 2/3.
@@ -20,6 +18,7 @@ import random
 from dataclasses import dataclass
 
 import engine as eng
+from ai.random_ai import RandomAI
 from cards import Guardiao, Heroi, Juiz, Mestre, duracao_mestre_da_raridade, duracao_portais_da_raridade, pontos_da_raridade
 from chains import ElementoCadeia, pode_barrar, resolver_cadeia
 
@@ -38,15 +37,27 @@ class ResultadoPartida:
     log: list
 
 
-def configurar_partida(config: dict, deck1: list, deck2: list, nome1: str = "P1", nome2: str = "P2", seed=None):
+def configurar_partida(
+    config: dict, deck1: list, deck2: list, nome1: str = "P1", nome2: str = "P2", ai1=None, ai2=None, seed=None
+):
     rng = random.Random(seed)
+    # ai1/ai2 têm que decidir aceite de mão (seção 3.4) já na preparação da
+    # partida — default pra RandomAI (sempre aceita mão válida) só pra
+    # manter chamadas antigas/testes que não se importam com essa decisão
+    # funcionando sem precisar passar uma IA explicitamente.
+    ai1 = ai1 if ai1 is not None else RandomAI(seed=rng.randrange(2**31))
+    ai2 = ai2 if ai2 is not None else RandomAI(seed=rng.randrange(2**31))
+    ais = {nome1: ai1, nome2: ai2}
+
     j1 = eng.EstadoJogador(nome=nome1, deck=list(deck1))
     j2 = eng.EstadoJogador(nome=nome2, deck=list(deck2))
     estado = eng.EstadoPartida(jogadores={nome1: j1, nome2: j2}, rodada=1)
 
     vencedor_par_ou_impar = rng.choice([nome1, nome2])
     perdedor = nome2 if vencedor_par_ou_impar == nome1 else nome1
-    titular = _preparar_maos_iniciais(estado, [perdedor, vencedor_par_ou_impar], vencedor_par_ou_impar, config, rng)
+    titular = _preparar_maos_iniciais(
+        estado, [perdedor, vencedor_par_ou_impar], vencedor_par_ou_impar, config, rng, ais
+    )
 
     if estado.vencedor is not None:
         # a espiral de desistências de mulligan (seção 3.4) já decidiu a
@@ -77,31 +88,46 @@ def configurar_partida(config: dict, deck1: list, deck2: list, nome1: str = "P1"
     return estado
 
 
-def _preparar_maos_iniciais(estado, ordem_decisao, titular_inicial, config, rng):
-    """Seção 3, itens 3-5. Um deck com poucos (ou nenhum) heróis comuns é
-    uma escolha de construção válida, não algo a impedir: se o jogador não
-    consegue montar uma mão com herói comum, ele desiste, o adversário
-    ganha +1 compra e, a partir da 2ª desistência, +1 ponto por tentativa —
-    "sem limite" (seção 3.4). Se isso levar o adversário a `pontos_vitoria`
-    antes mesmo da partida começar, ele vence ali mesmo (`estado.vencedor`).
+def _preparar_maos_iniciais(estado, ordem_decisao, titular_inicial, config, rng, ais):
+    """Seção 3, itens 3-5, e seção 3.4 (recusa voluntária de mão aceitável).
+
+    A cada rodada, quem NÃO detém a titularidade da prioridade decide
+    primeiro (aceita a mão ou pede outra); só depois quem detém a
+    titularidade decide a própria, já sabendo o que o outro escolheu. Uma
+    mão só é aceita se tiver herói comum (obrigatório) E a IA topar com
+    ela — recusar uma mão tecnicamente válida é uma escolha estratégica
+    real (`ai.aceitar_mao`), não algo automático. Mão aceita é definitiva,
+    nunca reavaliada.
+
+    A contabilização de compra-bônus/ponto/troca de titularidade
+    (`engine.registrar_decisao_mulligan`) só premia quem MANTÉM a mão
+    enquanto o outro desiste — se os dois desistem na mesma rodada,
+    ninguém ganha nada dela. Um deck com poucos (ou nenhum) heróis comuns
+    é uma escolha de construção válida, não algo a impedir: se isso levar
+    o adversário a `pontos_vitoria` antes mesmo da partida começar, ele
+    vence ali mesmo (`estado.vencedor`).
     """
     perdedor, vencedor = ordem_decisao
     titular = titular_inicial
     desistencias = {perdedor: 0, vencedor: 0}
-    aceitas = set()
+    aceitas: set = set()
     tentativas = 0
 
     while len(aceitas) < 2 and tentativas < MAX_TENTATIVAS_MULLIGAN:
         tentativas += 1
-        for nome in (perdedor, vencedor):
+        nao_titular = perdedor if titular == vencedor else vencedor
+        for nome in (nao_titular, titular):
             if nome in aceitas:
                 continue
+            outro_nome = perdedor if nome == vencedor else vencedor
+
             jogador = estado.jogadores[nome]
             rng.shuffle(jogador.deck)
             n = min(config["mao_inicial"], len(jogador.deck))
             jogador.mao = [jogador.deck.pop() for _ in range(n)]
 
-            if any(isinstance(c, Heroi) and c.raridade == "comum" for c in jogador.mao):
+            aceita = eng.tem_heroi_comum(jogador.mao) and ais[nome].aceitar_mao(jogador.mao, nome, config)
+            if aceita:
                 aceitas.add(nome)
                 continue
 
@@ -109,18 +135,28 @@ def _preparar_maos_iniciais(estado, ordem_decisao, titular_inicial, config, rng)
             jogador.mao = []
             desistencias[nome] += 1
             eng.registrar_evento(estado, acao="mulligan_desistencia", jogador=nome)
-            outro_nome = perdedor if nome == vencedor else vencedor
-            outro = estado.jogadores[outro_nome]
-            if outro.deck:
-                outro.mao.append(outro.deck.pop())
-            if desistencias[nome] >= 2:
-                outro.pontos += 1
+
+            consequencia = eng.registrar_decisao_mulligan(
+                nome=nome,
+                outro_nome=outro_nome,
+                outro_ja_aceitou=outro_nome in aceitas,
+                titular_atual=titular,
+                desistencias_nome=desistencias[nome],
+                config=config,
+            )
+            titular = consequencia.titular_prioridade
+
+            if consequencia.compra_bonus_para:
+                beneficiado = estado.jogadores[consequencia.compra_bonus_para]
+                if beneficiado.deck:
+                    beneficiado.mao.append(beneficiado.deck.pop())
+            if consequencia.ponto_para:
+                ganhador_nome = consequencia.ponto_para
+                estado.jogadores[ganhador_nome].pontos += 1
                 _log_pontos(estado)
-                if outro.pontos >= config["pontos_vitoria"]:
-                    estado.vencedor = outro_nome
+                if estado.jogadores[ganhador_nome].pontos >= config["pontos_vitoria"]:
+                    estado.vencedor = ganhador_nome
                     return titular
-            if nome == titular and outro_nome in aceitas:
-                titular = outro_nome
 
     if len(aceitas) < 2:
         # Só deve ocorrer com uma config de pontos_vitoria absurdamente alta
@@ -135,7 +171,7 @@ def _preparar_maos_iniciais(estado, ordem_decisao, titular_inicial, config, rng)
 
 def jogar_partida(config: dict, deck1: list, deck2: list, ai1, ai2, nome1="P1", nome2="P2", seed=None) -> ResultadoPartida:
     rng = random.Random(seed)
-    estado = configurar_partida(config, deck1, deck2, nome1, nome2, seed=rng.randrange(2**31))
+    estado = configurar_partida(config, deck1, deck2, nome1, nome2, ai1=ai1, ai2=ai2, seed=rng.randrange(2**31))
     ais = {nome1: ai1, nome2: ai2}
 
     turnos = continuar_partida(estado, ais, config, rng)

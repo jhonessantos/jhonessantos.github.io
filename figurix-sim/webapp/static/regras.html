@@ -293,17 +293,38 @@
       <div class="painel secao-regra">
         <div class="passo-jogo">
           <h3><span class="numero">1</span> Preparação</h3>
-          <p>Embaralhe seu deck de <span data-cfg="tamanho_deck"></span> cartas e compre uma mão inicial
-            de <span data-cfg="mao_inicial"></span> cartas.</p>
-          <p>Sua mão <strong>precisa</strong> ter pelo menos 1 herói comum. Se não tiver, você desiste
-            dela: devolve as cartas ao deck, embaralha e compra outra mão do zero — e seu adversário
-            ganha +1 compra extra (a partir da sua 2ª desistência seguida, ele também ganha +1 ponto).
-            Não há limite de tentativas.</p>
-          <p class="nota">Isso não é um "bug" a evitar — é uma escolha de construção legítima: um deck
-            com poucos heróis comuns pode aceitar ceder pontos em troca de outras vantagens de deck.</p>
-          <p>Par ou ímpar decide quem tem prioridade inicial. Cada jogador escolhe qual herói comum
-            entra em campo primeiro — quem escolheu o herói de <strong>menor força</strong> joga
-            primeiro (empate: decide quem tinha a prioridade).</p>
+          <p>Par ou ímpar decide quem detém a <strong>titularidade da prioridade</strong> — o vencedor.
+            Cada jogador embaralha seu deck de <span data-cfg="tamanho_deck"></span> cartas e compra uma
+            mão inicial de <span data-cfg="mao_inicial"></span> cartas.</p>
+          <p>O aceite de mão é <strong>sequencial</strong>: a cada rodada, quem <strong>não</strong> é o
+            titular decide primeiro — aceita a mão que tem ou pede outra — e só depois o titular decide
+            a sua, já sabendo o que o adversário escolheu.</p>
+          <ul>
+            <li>Uma mão sem herói comum é <strong>sempre</strong> recusada automaticamente — não tem
+              escolha aí.</li>
+            <li>Uma mão <em>com</em> herói comum já pode ser aceita — mas recusá-la também é uma escolha
+              legítima (não gostou do resto da mão, por exemplo). <strong>Mão aceita é definitiva</strong>:
+              uma vez aceita, não muda mais.</li>
+          </ul>
+          <p>As consequências de uma recusa dependem do que o adversário já decidiu nessa mesma rodada:</p>
+          <ul>
+            <li><strong>Os dois recusam na mesma rodada:</strong> ninguém ganha nada — cada um só compra
+              outra mão e tenta de novo.</li>
+            <li><strong>O não-titular recusa e o titular mantém a mão:</strong> o titular puxa 1 carta
+              bônus. Se o não-titular insistir de novo (2ª recusa consecutiva dele), o titular também
+              ganha +1 ponto — e assim por diante a cada nova recusa.</li>
+            <li><strong>O titular recusa depois que o não-titular já tinha aceitado:</strong> a
+              titularidade <strong>vira de lado</strong> — o não-titular passa a ser o titular e puxa 1
+              carta bônus (com o mesmo bônus de ponto a partir da 2ª recusa consecutiva). A partir daí é
+              como se ele tivesse sido quem venceu o par ou ímpar.</li>
+          </ul>
+          <p class="nota">Isso não é um "bug" a evitar — um deck com poucos heróis comuns (que força
+            recusas repetidas) pode aceitar ceder pontos em troca de outras vantagens de construção. Não
+            há limite de tentativas: se ceder pontos suficientes fizer o adversário chegar a
+            <span data-cfg="pontos_vitoria"></span>, a partida acaba ali, antes mesmo do primeiro turno.</p>
+          <p>Depois que os dois aceitam a mão, cada jogador escolhe qual herói comum entra em campo
+            primeiro — quem escolheu o herói de <strong>menor força</strong> joga primeiro (empate: decide
+            quem detém a titularidade final).</p>
         </div>
 
         <div class="passo-jogo">

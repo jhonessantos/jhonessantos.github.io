@@ -61,6 +61,27 @@ def test_variante_mcts_decide_sem_crash(config, chave):
 
 
 # ------------------------------------------------------------------
+# Seção 3.4: aceite/recusa de mão inicial
+# ------------------------------------------------------------------
+
+def test_personas_rush_aceitam_qualquer_mao_valida():
+    from cards import Heroi
+
+    mao_fraca = [Heroi(raridade="comum")]  # sem invocação nem herói forte
+    for chave in ("agressiva", "gastadora", "rush_pontos"):
+        ia = criar_ia(chave, seed=1)
+        assert ia.aceitar_mao(mao_fraca, "P1", {}) is True, f"{chave} deveria aceitar qualquer mão válida"
+
+
+def test_persona_padrao_recusa_mao_fraca_como_heuristic_ai():
+    from cards import Heroi
+
+    mao_fraca = [Heroi(raridade="comum")]
+    ia = criar_ia("certinho", seed=1)
+    assert ia.aceitar_mao(mao_fraca, "P1", {}) is False
+
+
+# ------------------------------------------------------------------
 # Comportamento distinto entre personas (não só "roda sem crash")
 # ------------------------------------------------------------------
 

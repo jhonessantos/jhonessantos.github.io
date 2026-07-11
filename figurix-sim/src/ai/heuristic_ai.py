@@ -49,6 +49,9 @@ class HeuristicAI:
             return self._decidir_barragem(acoes_legais)
         return self._decidir_turno(estado, jogador_nome, acoes_legais, config)
 
+    def aceitar_mao(self, mao: list, jogador_nome: str, config: dict) -> bool:
+        return eng.mao_aceitavel_por_heuristica_padrao(mao)
+
     # ------------------------------------------------------------------
     # Barragem
     # ------------------------------------------------------------------

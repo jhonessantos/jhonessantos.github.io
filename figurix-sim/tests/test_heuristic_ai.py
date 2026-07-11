@@ -2,7 +2,24 @@
 from ai.heuristic_ai import HeuristicAI
 from ai.random_ai import RandomAI
 from cardpool import montar_deck_medio
+from cards import Heroi, Invocacao
 from match import MAX_TURNOS_SEGURANCA, jogar_partida
+
+
+def test_heuristic_recusa_mao_fraca_mas_aceita_com_invocacao_ou_heroi_forte():
+    ia = HeuristicAI(seed=1)
+    so_comum = [Heroi(raridade="comum")]
+    comum_com_invocacao = [Heroi(raridade="comum"), Invocacao(categoria="Acao")]
+    comum_com_heroi_forte = [Heroi(raridade="comum"), Heroi(raridade="rara")]
+
+    assert ia.aceitar_mao(so_comum, "P1", {}) is False
+    assert ia.aceitar_mao(comum_com_invocacao, "P1", {}) is True
+    assert ia.aceitar_mao(comum_com_heroi_forte, "P1", {}) is True
+
+
+def test_random_ai_sempre_aceita_mao_valida():
+    ia = RandomAI(seed=1)
+    assert ia.aceitar_mao([Heroi(raridade="comum")], "P1", {}) is True
 
 
 def test_heuristic_x_random_sem_crash_nem_loop_infinito(config):
