@@ -1,9 +1,57 @@
 """Sanidade do gerador de cartas: tudo deve respeitar as faixas do config."""
 import pytest
 
-from cardpool import CardPool, categorias_da_variacao, montar_deck
+from cardpool import (
+    CardPool,
+    N_TIPOS_HEROI,
+    N_VARIACOES_OFICIAIS,
+    categorias_da_variacao,
+    montar_deck,
+    tipo_da_variacao,
+    variacoes_do_tipo,
+)
 from cards import Invocacao, poderes_da_raridade, pontos_da_raridade, raridade_equivalente
 from deck import validar_deck
+
+
+# ------------------------------------------------------------------
+# Tipo de herói (seção 9): 35 tipos, cada um agrupando 3 variações —
+# um Mestre domina o TIPO inteiro, não uma variação específica.
+# ------------------------------------------------------------------
+
+def test_tipo_da_variacao_cobre_todas_as_105_variacoes(config):
+    tipos_vistos = {tipo_da_variacao(vid, config) for vid in range(1, N_VARIACOES_OFICIAIS + 1)}
+    assert tipos_vistos == set(range(1, N_TIPOS_HEROI + 1))
+
+
+def test_cada_tipo_tem_exatamente_3_variacoes(config):
+    for tipo_id in range(1, N_TIPOS_HEROI + 1):
+        variacoes = variacoes_do_tipo(tipo_id, config)
+        assert len(variacoes) == 3
+        assert len(set(variacoes)) == 3
+        for vid in variacoes:
+            assert 1 <= vid <= N_VARIACOES_OFICIAIS
+
+
+def test_tipo_da_variacao_e_variacoes_do_tipo_sao_inversas(config):
+    for vid in range(1, N_VARIACOES_OFICIAIS + 1):
+        tipo_id = tipo_da_variacao(vid, config)
+        assert vid in variacoes_do_tipo(tipo_id, config)
+
+
+def test_as_3_variacoes_de_um_tipo_tem_a_mesma_categoria_principal(config):
+    for tipo_id in range(1, N_TIPOS_HEROI + 1):
+        categorias = {categorias_da_variacao(vid, config)[0] for vid in variacoes_do_tipo(tipo_id, config)}
+        assert len(categorias) == 1
+
+
+def test_105_variacoes_dividem_em_35_tipos_disjuntos(config):
+    todas_variacoes = set()
+    for tipo_id in range(1, N_TIPOS_HEROI + 1):
+        variacoes = variacoes_do_tipo(tipo_id, config)
+        assert todas_variacoes.isdisjoint(variacoes)
+        todas_variacoes.update(variacoes)
+    assert todas_variacoes == set(range(1, N_VARIACOES_OFICIAIS + 1))
 
 
 def test_forca_heroi_dentro_da_faixa_da_raridade(config):

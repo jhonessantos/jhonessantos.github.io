@@ -1,9 +1,36 @@
 """M4: HeuristicAI — smoke test e sanidade (deve jogar bem melhor que RandomAI)."""
+import engine as eng
 from ai.heuristic_ai import HeuristicAI
 from ai.random_ai import RandomAI
-from cardpool import montar_deck_medio
+from cardpool import CardPool, montar_deck_medio, tipo_da_variacao
 from cards import Heroi, Invocacao
 from match import MAX_TURNOS_SEGURANCA, jogar_partida
+
+
+def test_mestre_do_proprio_tipo_prefere_mestre_que_domina_o_tipo_do_heroi_ativo(config):
+    pool = CardPool(config, seed=3)
+    tipo_do_heroi = tipo_da_variacao(1, config)
+    outro_tipo = tipo_do_heroi + 1 if tipo_do_heroi < 35 else tipo_do_heroi - 1
+
+    heroi = pool.novo_heroi("rara", variacao_id=1, forca=200)
+    campo = eng.EstadoHeroiCampo.entrar_em_campo(heroi, rodada_atual=1)
+    j1 = eng.EstadoJogador(nome="P1", heroi_ativo=campo)
+    heroi_p2 = pool.novo_heroi("rara", variacao_id=2, forca=200)
+    j2 = eng.EstadoJogador(nome="P2", heroi_ativo=eng.EstadoHeroiCampo.entrar_em_campo(heroi_p2, rodada_atual=1))
+    estado = eng.EstadoPartida(jogadores={"P1": j1, "P2": j2}, turno_de="P1")
+
+    mestre_certo = pool.novo_mestre("comum", tipo_heroi_dominado=tipo_do_heroi, forca=100)
+    mestre_errado = pool.novo_mestre("comum", tipo_heroi_dominado=outro_tipo, forca=300)
+
+    acoes = [
+        eng.Acao("invocar_mestre", {"carta": mestre_errado, "pagamento": []}),
+        eng.Acao("invocar_mestre", {"carta": mestre_certo, "pagamento": []}),
+        eng.Acao("passar"),
+    ]
+
+    ia = HeuristicAI(seed=1)
+    acao = ia.escolher_acao(estado, "P1", acoes, config)
+    assert acao.dados["carta"] is mestre_certo
 
 
 def test_heuristic_recusa_mao_fraca_mas_aceita_com_invocacao_ou_heroi_forte():

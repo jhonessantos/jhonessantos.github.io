@@ -1,23 +1,35 @@
-"""Nomes de exibição para entidades sintéticas (heróis, guardiões...).
+"""Nomes de exibição para entidades sintéticas (heróis, mestres, guardiões...).
 
-O motor (src/cards.py) só guarda IDs numéricos (variacao_id, participante_id,
-tipo) — mas os 105 heróis (variação 1-105) TÊM nomes de personagem reais:
-5 categorias de 21 heróis cada, e cada 21 dividido em 7 "tipos" (família
-temática, ex.: "Anjo") de 3 variantes cada (ex.: "Anjo Vigilante", "Anjo
-Transcendente", "Anjo de Cristal"). Este módulo mapeia variacao_id para
-esses nomes — camada de exibição só, não inventa nenhuma regra de jogo.
+O motor (src/cards.py) só guarda IDs numéricos (variacao_id, tipo_heroi_dominado,
+tipo de guardião) — mas os 105 heróis (variação 1-105) TÊM nomes de
+personagem reais: 5 categorias de 21 heróis cada, e cada 21 dividido em 7
+"tipos de herói" (família temática, ex.: "Anjo") de 3 variantes cada
+(ex.: "Anjo Vigilante", "Anjo Transcendente", "Anjo de Cristal") — 35
+tipos ao todo. Um Mestre domina um TIPO inteiro, não uma variação
+específica (seção 9) — "Mestre dos Protetores" domina as 3 variações de
+Protetor. Este módulo mapeia os IDs numéricos pra esses nomes — camada de
+exibição só, não inventa nenhuma regra de jogo.
 
-A categoria de uma variação é `variacao_id % 5` (mesma lógica de
-`cardpool.categorias_da_variacao`, replicada aqui pra este módulo não
-precisar importar de src/ — a ordem das categorias é fixa desde a v1 das
-regras: ["Conexao", "Coracao", "Acao", "Mente", "Criacao"], igual
-`config["categorias"]`).
+A categoria/tipo de uma variação vêm de `cardpool.categorias_da_variacao`/
+`tipo_da_variacao` (a mesma lógica usada pelo motor) — importado de src/
+em vez de duplicado aqui, pra garantir que o nome exibido nunca desalinhe
+do agrupamento real que o motor calcula.
 """
 from __future__ import annotations
 
-_ORDEM_CATEGORIAS = ["Conexao", "Coracao", "Acao", "Mente", "Criacao"]
+import sys
+from pathlib import Path
 
-# 21 nomes por categoria, na ordem dos 7 "tipos" (3 variantes cada, agrupadas)
+SRC = Path(__file__).resolve().parent.parent / "src"
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
+
+from cardpool import N_VARIACOES_OFICIAIS, categorias_da_variacao, tipo_da_variacao  # noqa: E402
+from config import carregar_config  # noqa: E402
+
+CONFIG = carregar_config()
+
+# 21 nomes por categoria, na ordem dos 7 "tipos de herói" (3 variantes cada, agrupadas)
 _HEROIS_POR_CATEGORIA = {
     "Coracao": [
         "Anjo Vigilante", "Anjo Transcendente", "Anjo de Cristal",
@@ -66,17 +78,50 @@ _HEROIS_POR_CATEGORIA = {
     ],
 }
 
+# sufixo (com artigo/gênero corretos) do nome do Mestre de cada tipo de
+# herói — mesma ordem dos grupos de 3 acima. Pluralização/gênero em
+# português não são regulares o bastante pra derivar automaticamente
+# (ex.: "Centurião" -> "Centuriões"), por isso é uma lista curada.
+_SUFIXO_MESTRE_POR_CATEGORIA = {
+    "Coracao": [
+        "dos Anjos", "dos Curadores", "dos Druidas", "das Fadas",
+        "dos Monges", "dos Pacificadores", "dos Protetores",
+    ],
+    "Mente": [
+        "dos Androides", "dos Arcanistas", "dos Estrategistas", "dos Magos",
+        "dos Oráculos", "dos Sábios", "dos Telepatas",
+    ],
+    "Criacao": [
+        "dos Alquimistas", "dos Artífices", "dos Bardos", "dos Ilusionistas",
+        "dos Inventores", "dos Modeladores", "dos Viajantes",
+    ],
+    "Acao": [
+        "dos Centuriões", "dos Espadachins", "dos Gladiadores", "dos Guerreiros",
+        "dos Ninjas", "dos Samurais", "dos Soldados",
+    ],
+    "Conexao": [
+        "dos Arquiduques", "dos Cavaleiros", "dos Conselheiros", "dos Diplomatas",
+        "dos Mensageiros", "dos Sacerdotes", "das Sentinelas",
+    ],
+}
 
-def _construir_mapa_nomes() -> dict[int, str]:
-    mapa: dict[int, str] = {}
+
+def _construir_mapas() -> tuple[dict[int, str], dict[int, str]]:
+    nomes_herois: dict[int, str] = {}
+    sufixos_mestre: dict[int, str] = {}
     for categoria, nomes in _HEROIS_POR_CATEGORIA.items():
-        indice_categoria = _ORDEM_CATEGORIAS.index(categoria)
-        ids_da_categoria = [vid for vid in range(1, 106) if vid % len(_ORDEM_CATEGORIAS) == indice_categoria]
-        mapa.update(zip(ids_da_categoria, nomes))
-    return mapa
+        ids_da_categoria = sorted(
+            vid for vid in range(1, N_VARIACOES_OFICIAIS + 1) if categorias_da_variacao(vid, CONFIG)[0] == categoria
+        )
+        nomes_herois.update(zip(ids_da_categoria, nomes))
+        for i, sufixo in enumerate(_SUFIXO_MESTRE_POR_CATEGORIA[categoria]):
+            primeira_variacao_do_grupo = ids_da_categoria[i * 3]
+            tipo_id = tipo_da_variacao(primeira_variacao_do_grupo, CONFIG)
+            sufixos_mestre[tipo_id] = sufixo
+    return nomes_herois, sufixos_mestre
 
 
-_NOMES_HEROIS = _construir_mapa_nomes()
+_NOMES_HEROIS, _SUFIXOS_MESTRE = _construir_mapas()
 
 _NOME_GUARDIAO = {
     "Portais": "Guardião dos Portais",
@@ -96,7 +141,8 @@ def nome_guardiao(tipo: str) -> str:
 
 
 def nome_mestre(tipo_heroi_dominado: int) -> str:
-    return f"Mestre de {nome_participante(tipo_heroi_dominado)}"
+    sufixo = _SUFIXOS_MESTRE.get(tipo_heroi_dominado, f"do Tipo #{tipo_heroi_dominado}")
+    return f"Mestre {sufixo}"
 
 
 def nome_item(tipo_heroi: int) -> str:

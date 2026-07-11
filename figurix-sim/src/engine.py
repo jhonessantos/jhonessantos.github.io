@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 import combat
+from cardpool import tipo_da_variacao
 from cards import (
     Guardiao,
     Heroi,
@@ -725,7 +726,8 @@ def prever_resultado_ataque(
     categoria_ataque_usado = getattr(atacante_carta, CATEGORIA_POR_TIPO_ATAQUE[tipo_ataque])
     local_favorece = estado.local is not None and estado.local.carta.categoria == categoria_ataque_usado
     mestre_presente = (
-        jogador.mestre is not None and jogador.mestre.carta.tipo_heroi_dominado == atacante_carta.variacao_id
+        jogador.mestre is not None
+        and jogador.mestre.carta.tipo_heroi_dominado == tipo_da_variacao(atacante_carta.variacao_id, config)
     )
     item_anexado = jogador.heroi_ativo.item_anexado is not None
 

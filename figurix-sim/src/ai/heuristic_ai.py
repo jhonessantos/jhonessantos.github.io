@@ -29,6 +29,7 @@ from __future__ import annotations
 import random
 
 import engine as eng
+from cardpool import tipo_da_variacao
 from cards import Juiz
 
 
@@ -113,7 +114,7 @@ class HeuristicAI:
             return max(por_tipo["evoluir"], key=lambda a: a.dados["carta"].forca_impressa)
 
         if por_tipo.get("invocar_mestre"):
-            acao = self._mestre_do_proprio_tipo(por_tipo["invocar_mestre"], jogador)
+            acao = self._mestre_do_proprio_tipo(por_tipo["invocar_mestre"], jogador, config)
             if acao is not None:
                 return acao
 
@@ -160,10 +161,10 @@ class HeuristicAI:
                 melhor, melhor_dano = acao, resultado.dano_final
         return melhor
 
-    def _mestre_do_proprio_tipo(self, opcoes, jogador):
+    def _mestre_do_proprio_tipo(self, opcoes, jogador, config):
         if jogador.heroi_ativo is None:
             return None
-        tipo_heroi = jogador.heroi_ativo.carta.variacao_id
+        tipo_heroi = tipo_da_variacao(jogador.heroi_ativo.carta.variacao_id, config)
         candidatos = [a for a in opcoes if a.dados["carta"].tipo_heroi_dominado == tipo_heroi]
         if not candidatos:
             return None

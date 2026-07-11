@@ -21,6 +21,9 @@ from cards import (
 )
 
 N_VARIACOES_OFICIAIS = 105
+N_TIPOS_HEROI = 35  # 5 categorias x 7 "tipos de herói" cada — todo tipo agrupa 3 variações
+_VARIACOES_POR_TIPO = 3
+_TIPOS_POR_CATEGORIA = N_TIPOS_HEROI // 5  # 7
 
 
 def categorias_da_variacao(variacao_id: int, config: dict) -> tuple[str, str, str]:
@@ -33,6 +36,34 @@ def categorias_da_variacao(variacao_id: int, config: dict) -> tuple[str, str, st
     n = len(categorias)
     i = variacao_id % n
     return categorias[i], categorias[(i + 1) % n], categorias[(i + 2) % n]
+
+
+def _primeiro_id_da_categoria(indice_categoria: int, n_categorias: int) -> int:
+    # variacao_id vai de 1 a 105 — o índice 0 (ex.: "Conexao") não tem
+    # variacao_id=0 (não existe), então o primeiro da categoria é n_categorias.
+    return indice_categoria if indice_categoria != 0 else n_categorias
+
+
+def tipo_da_variacao(variacao_id: int, config: dict) -> int:
+    """1-35: a que "tipo de herói" (família de 3 variações — ex.: os 3
+    "Protetor") uma variação pertence. Um Mestre domina um TIPO inteiro,
+    não uma variação específica (seção 9): qualquer uma das 3 variações
+    do tipo conta como "o tipo do Mestre" em campo."""
+    n = len(config["categorias"])
+    indice_categoria = variacao_id % n
+    primeiro_id = _primeiro_id_da_categoria(indice_categoria, n)
+    posicao_na_categoria = (variacao_id - primeiro_id) // n
+    tipo_dentro_categoria = posicao_na_categoria // _VARIACOES_POR_TIPO
+    return indice_categoria * _TIPOS_POR_CATEGORIA + tipo_dentro_categoria + 1
+
+
+def variacoes_do_tipo(tipo_id: int, config: dict) -> list[int]:
+    """As 3 variações (variacao_id) que pertencem a um tipo de herói (1-35)."""
+    n = len(config["categorias"])
+    indice_categoria, tipo_dentro_categoria = divmod(tipo_id - 1, _TIPOS_POR_CATEGORIA)
+    primeiro_id = _primeiro_id_da_categoria(indice_categoria, n)
+    primeira_posicao = tipo_dentro_categoria * _VARIACOES_POR_TIPO
+    return [primeiro_id + (primeira_posicao + k) * n for k in range(_VARIACOES_POR_TIPO)]
 
 
 def _valores_forca(raridade: str, config: dict) -> list[int]:
@@ -98,7 +129,7 @@ class CardPool:
         forca: int | None = None,
     ) -> Mestre:
         if tipo_heroi_dominado is None:
-            tipo_heroi_dominado = self.rng.randint(1, N_VARIACOES_OFICIAIS)
+            tipo_heroi_dominado = self.rng.randint(1, N_TIPOS_HEROI)
         if categoria is None:
             categoria = self.rng.choice(self.config["categorias"])
         if forca is None:
@@ -330,7 +361,7 @@ def montar_deck(
     # mestres: no máximo max_mesmo_mestre por tipo dominado
     max_mesmo_mestre = config["max_mesmo_mestre"]
     tipos_mestre_usados: dict[int, int] = {}
-    tipos_disponiveis = list(range(1, N_VARIACOES_OFICIAIS + 1))
+    tipos_disponiveis = list(range(1, N_TIPOS_HEROI + 1))
     pool.rng.shuffle(tipos_disponiveis)
     idx_tipo = 0
     for _ in range(contagens["masters"]):

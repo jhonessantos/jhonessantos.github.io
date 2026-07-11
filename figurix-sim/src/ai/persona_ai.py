@@ -21,6 +21,7 @@ from __future__ import annotations
 import random
 
 import engine as eng
+from cardpool import tipo_da_variacao
 from cards import Guardiao, Juiz, Mestre
 
 PARAMETROS_PADRAO = {
@@ -182,7 +183,7 @@ class PersonaAI:
         opcoes = ctx.por_tipo.get("invocar_mestre")
         if not opcoes or ctx.jogador.heroi_ativo is None:
             return None
-        tipo_heroi = ctx.jogador.heroi_ativo.carta.variacao_id
+        tipo_heroi = tipo_da_variacao(ctx.jogador.heroi_ativo.carta.variacao_id, ctx.config)
         candidatos = [a for a in opcoes if a.dados["carta"].tipo_heroi_dominado == tipo_heroi]
         if not candidatos:
             return None

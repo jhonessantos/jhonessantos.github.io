@@ -93,6 +93,32 @@ def _jogador_com_heroi(pool, nome, forca=200):
     return EstadoJogador(nome=nome, heroi_ativo=campo)
 
 
+def test_mestre_do_proprio_tipo_prefere_mestre_que_domina_o_tipo_do_heroi_ativo(config):
+    from cardpool import tipo_da_variacao
+
+    pool = CardPool(config, seed=1)
+    tipo_do_heroi = tipo_da_variacao(1, config)  # _jogador_com_heroi usa variacao_id=1
+    outro_tipo = tipo_do_heroi + 1 if tipo_do_heroi < 35 else tipo_do_heroi - 1
+
+    j1 = _jogador_com_heroi(pool, "P1")
+    estado = eng.EstadoPartida(jogadores={"P1": j1, "P2": _jogador_com_heroi(pool, "P2")}, turno_de="P1")
+
+    mestre_certo = pool.novo_mestre("comum", tipo_heroi_dominado=tipo_do_heroi, forca=100)
+    # força maior no errado: se a comparação de tipo estivesse quebrada e caísse
+    # pro desempate por força, esse teste pegaria o erro.
+    mestre_errado = pool.novo_mestre("comum", tipo_heroi_dominado=outro_tipo, forca=300)
+
+    acoes = [
+        eng.Acao("invocar_mestre", {"carta": mestre_errado, "pagamento": []}),
+        eng.Acao("invocar_mestre", {"carta": mestre_certo, "pagamento": []}),
+        eng.Acao("passar"),
+    ]
+
+    ia = criar_ia("certinho", seed=1)
+    acao = ia.escolher_acao(estado, "P1", acoes, config)
+    assert acao.dados["carta"] is mestre_certo
+
+
 def test_acumuladora_guarda_mais_invocacao_que_gastadora(config):
     pool = CardPool(config, seed=1)
     j1 = _jogador_com_heroi(pool, "P1")
