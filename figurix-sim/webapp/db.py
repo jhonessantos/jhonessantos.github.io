@@ -94,6 +94,17 @@ def inicializar_banco() -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_partidas_lote ON partidas(lote_id)")
 
 
+def nome_de_deck_em_uso(nome: str, excluir_id: int | None = None) -> bool:
+    with _conexao() as conn:
+        if excluir_id is None:
+            linha = conn.execute("SELECT 1 FROM decks WHERE nome = ?", (nome,)).fetchone()
+        else:
+            linha = conn.execute(
+                "SELECT 1 FROM decks WHERE nome = ? AND id != ?", (nome, excluir_id)
+            ).fetchone()
+    return linha is not None
+
+
 def salvar_deck(nome: str, cartas: list[dict], parametros: dict | None = None) -> int:
     agora = datetime.now(timezone.utc).isoformat()
     with _conexao() as conn:

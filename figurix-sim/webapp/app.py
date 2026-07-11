@@ -76,6 +76,7 @@ class ParametrosGeracao(BaseModel):
     faixa_forca: str = "medio"
     arquetipo: str = "balanceado"
     perfil_invocacoes: str = "moderado"
+    categoria_preferida: Optional[str] = None
     seed: Optional[int] = None
 
 
@@ -87,6 +88,7 @@ def gerar_deck(params: ParametrosGeracao) -> dict:
             faixa_forca=params.faixa_forca,
             arquetipo=params.arquetipo,
             perfil_invocacoes=params.perfil_invocacoes,
+            categoria_preferida=params.categoria_preferida,
             seed=params.seed,
         )
     except ValueError as e:
@@ -191,6 +193,8 @@ def listar_decks() -> list[dict]:
 
 @app.post("/api/decks")
 def criar_deck(entrada: DeckEntrada) -> dict:
+    if db.nome_de_deck_em_uso(entrada.nome):
+        raise HTTPException(status_code=409, detail=f"Já existe um deck chamado {entrada.nome!r}")
     deck_id = db.salvar_deck(entrada.nome, entrada.cartas, entrada.parametros)
     return _deck_completo(deck_id)
 
@@ -207,6 +211,8 @@ def obter_deck(deck_id: int) -> dict:
 def atualizar_deck(deck_id: int, entrada: DeckEntrada) -> dict:
     if db.obter_deck(deck_id) is None:
         raise HTTPException(status_code=404, detail="Deck não encontrado")
+    if db.nome_de_deck_em_uso(entrada.nome, excluir_id=deck_id):
+        raise HTTPException(status_code=409, detail=f"Já existe um deck chamado {entrada.nome!r}")
     db.atualizar_deck(deck_id, entrada.nome, entrada.cartas)
     return _deck_completo(deck_id)
 

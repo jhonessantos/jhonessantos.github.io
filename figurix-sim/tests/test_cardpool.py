@@ -5,12 +5,13 @@ from cardpool import (
     CardPool,
     N_TIPOS_HEROI,
     N_VARIACOES_OFICIAIS,
+    categoria_do_tipo_heroi,
     categorias_da_variacao,
     montar_deck,
     tipo_da_variacao,
     variacoes_do_tipo,
 )
-from cards import Invocacao, poderes_da_raridade, pontos_da_raridade, raridade_equivalente
+from cards import Heroi, Invocacao, ItemHeroi, poderes_da_raridade, pontos_da_raridade, raridade_equivalente
 from deck import validar_deck
 
 
@@ -134,8 +135,61 @@ def test_arquetipo_hiperinvocacao_e_extremo_mas_valido(config):
     assert len(deck) == config["tamanho_deck"]
     assert validar_deck(deck, config) == []
 
-    from cards import Heroi
-
     herois = [c for c in deck if isinstance(c, Heroi)]
     assert len(herois) == 10
     assert any(h.raridade == "comum" for h in herois)  # precisa continuar jogável
+
+
+# ------------------------------------------------------------------
+# categoria_preferida (deck builder do webapp): puxa a montagem pra ter
+# mais cartas de uma categoria escolhida, sem eliminar as outras 4.
+# ------------------------------------------------------------------
+
+def _categoria_da_carta(carta, config):
+    if isinstance(carta, Heroi):
+        return carta.categoria_principal
+    if isinstance(carta, ItemHeroi):
+        return categoria_do_tipo_heroi(carta.tipo_heroi, config)
+    return carta.categoria
+
+
+def test_categoria_preferida_invalida_leva_erro(config):
+    with pytest.raises(ValueError):
+        montar_deck(config, categoria_preferida="Inexistente", seed=1)
+
+
+def test_sem_categoria_preferida_nao_muda_o_deck(config):
+    """categoria_preferida=None precisa gerar o MESMO deck de antes (mesma
+    seed) — a mudança não pode alterar o comportamento padrão."""
+    com_default_explicito = montar_deck(config, categoria_preferida=None, seed=1)
+    sem_parametro = montar_deck(config, seed=1)
+
+    def serializado(deck):
+        # uid é um contador global de instância, não parte do resultado
+        # determinístico da seed — não entra na comparação.
+        return [(type(c).__name__, {k: v for k, v in c.__dict__.items() if k != "uid"}) for c in deck]
+
+    assert serializado(com_default_explicito) == serializado(sem_parametro)
+
+
+@pytest.mark.parametrize("categoria", ["Conexao", "Coracao", "Acao", "Mente", "Criacao"])
+def test_categoria_preferida_aumenta_a_representacao_da_categoria(config, categoria):
+    """Rodando vários seeds, a categoria preferida deve, na média, aparecer
+    proporcionalmente muito mais que 1/5 das cartas do deck (baseline sem
+    preferência) — sem virar exclusividade (as outras 4 continuam presentes)."""
+    contagem_preferida = 0
+    contagem_baseline = 0
+    total = 0
+    n_seeds = 30
+    for seed in range(n_seeds):
+        deck_preferido = montar_deck(config, categoria_preferida=categoria, seed=seed)
+        deck_base = montar_deck(config, seed=seed)
+        total += len(deck_preferido)
+        contagem_preferida += sum(1 for c in deck_preferido if _categoria_da_carta(c, config) == categoria)
+        contagem_baseline += sum(1 for c in deck_base if _categoria_da_carta(c, config) == categoria)
+
+        # outras categorias continuam presentes (não é exclusividade)
+        categorias_presentes = {_categoria_da_carta(c, config) for c in deck_preferido}
+        assert len(categorias_presentes) == len(config["categorias"])
+
+    assert contagem_preferida > contagem_baseline * 1.3

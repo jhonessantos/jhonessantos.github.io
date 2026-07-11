@@ -66,6 +66,12 @@ def variacoes_do_tipo(tipo_id: int, config: dict) -> list[int]:
     return [primeiro_id + (primeira_posicao + k) * n for k in range(_VARIACOES_POR_TIPO)]
 
 
+def categoria_do_tipo_heroi(tipo_id: int, config: dict) -> str:
+    """Categoria (das 5) a que um tipo de herói (1-35) pertence."""
+    indice_categoria = (tipo_id - 1) // _TIPOS_POR_CATEGORIA
+    return config["categorias"][indice_categoria]
+
+
 def _valores_forca(raridade: str, config: dict) -> list[int]:
     passo = config["forca_passo"]
     if eh_especial(raridade, config):
@@ -253,11 +259,51 @@ def _sortear_raridade(orcamento: dict, rng: random.Random) -> str:
     return rng.choices(raridades, weights=pesos, k=1)[0]
 
 
+# peso da categoria preferida sobre cada uma das outras 4 na montagem de
+# deck ("mais cartas de uma categoria" — pedido do usuário). Não é
+# exclusividade: as outras categorias continuam podendo aparecer.
+PESO_CATEGORIA_PREFERIDA = 3.0
+
+
+def _pesos_categoria(config: dict, categoria_preferida: str | None) -> dict[str, float]:
+    categorias = config["categorias"]
+    if categoria_preferida is None:
+        return {c: 1.0 for c in categorias}
+    if categoria_preferida not in categorias:
+        raise ValueError(f"categoria_preferida desconhecida: {categoria_preferida!r}")
+    return {c: (PESO_CATEGORIA_PREFERIDA if c == categoria_preferida else 1.0) for c in categorias}
+
+
+def _categoria_aleatoria_ponderada(rng: random.Random, pesos_categoria: dict[str, float]) -> str:
+    categorias = list(pesos_categoria.keys())
+    return rng.choices(categorias, weights=[pesos_categoria[c] for c in categorias], k=1)[0]
+
+
+def _tipo_heroi_aleatorio_ponderado(rng: random.Random, pesos_categoria: dict[str, float], config: dict) -> int:
+    categoria = _categoria_aleatoria_ponderada(rng, pesos_categoria)
+    indice_categoria = config["categorias"].index(categoria)
+    primeiro_tipo = indice_categoria * _TIPOS_POR_CATEGORIA + 1
+    return rng.randint(primeiro_tipo, primeiro_tipo + _TIPOS_POR_CATEGORIA - 1)
+
+
+def _ordem_ponderada(rng: random.Random, itens: list, peso_de) -> list:
+    """Embaralha `itens` com viés: itens de peso maior tendem a aparecer mais
+    cedo na ordem resultante (amostragem ponderada sem reposição, técnica de
+    Efraimidis-Spirakis). Usado pra puxar a montagem de deck pra uma
+    categoria preferida sem eliminar as outras: como families/tipos são
+    consumidos em ordem até bater a contagem-alvo, quem vem mais cedo tem
+    mais chance de entrar no deck."""
+    chaves = [(rng.random() ** (1.0 / peso_de(item)), item) for item in itens]
+    chaves.sort(key=lambda par: par[0], reverse=True)
+    return [item for _, item in chaves]
+
+
 def montar_deck(
     config: dict,
     faixa_forca: str = "medio",
     arquetipo: str = "balanceado",
     perfil_invocacoes: str = "moderado",
+    categoria_preferida: str | None = None,
     seed: int | None = None,
 ) -> list:
     """Monta uma lista de cartas (tamanho_deck cartas) respeitando as regras
@@ -271,6 +317,9 @@ def montar_deck(
     se divide entre itens e locais na proporção-base do arquétipo. É um
     eixo INDEPENDENTE de faixa_forca/arquetipo — dá pra testar, por
     exemplo, um deck "forte" econômico contra um "fraco" rico em invocação.
+    `categoria_preferida`: opcional, uma das 5 categorias — puxa a
+    montagem pra ter mais cartas dessa categoria (heróis, mestres,
+    guardiões, juiz, itens, locais e invocações), sem eliminar as outras.
     """
     if faixa_forca not in _ORCAMENTO_RARIDADE:
         raise ValueError(f"faixa_forca desconhecida: {faixa_forca!r}")
@@ -279,6 +328,7 @@ def montar_deck(
     if perfil_invocacoes not in _PERFIS_INVOCACAO:
         raise ValueError(f"perfil_invocacoes desconhecido: {perfil_invocacoes!r}")
 
+    pesos_categoria = _pesos_categoria(config, categoria_preferida)
     orcamento = _ORCAMENTO_RARIDADE[faixa_forca]
     base = _ARQUETIPOS[arquetipo]
     tamanho_deck = config["tamanho_deck"]
@@ -326,7 +376,9 @@ def montar_deck(
     pesos_superiores = [orcamento[r] for r in raridades_superiores]
 
     variacao_ids = list(range(1, N_VARIACOES_OFICIAIS + 1))
-    pool.rng.shuffle(variacao_ids)
+    variacao_ids = _ordem_ponderada(
+        pool.rng, variacao_ids, lambda vid: pesos_categoria[categorias_da_variacao(vid, config)[0]]
+    )
 
     familias: dict[int, set] = {}
     idx_variacao = 0
@@ -362,7 +414,9 @@ def montar_deck(
     max_mesmo_mestre = config["max_mesmo_mestre"]
     tipos_mestre_usados: dict[int, int] = {}
     tipos_disponiveis = list(range(1, N_TIPOS_HEROI + 1))
-    pool.rng.shuffle(tipos_disponiveis)
+    tipos_disponiveis = _ordem_ponderada(
+        pool.rng, tipos_disponiveis, lambda t: pesos_categoria[categoria_do_tipo_heroi(t, config)]
+    )
     idx_tipo = 0
     for _ in range(contagens["masters"]):
         while idx_tipo < len(tipos_disponiveis) and tipos_mestre_usados.get(
@@ -372,7 +426,8 @@ def montar_deck(
         tipo = tipos_disponiveis[idx_tipo]
         tipos_mestre_usados[tipo] = tipos_mestre_usados.get(tipo, 0) + 1
         raridade = _sortear_raridade(orcamento, pool.rng)
-        cartas.append(pool.novo_mestre(raridade, tipo_heroi_dominado=tipo))
+        categoria = _categoria_aleatoria_ponderada(pool.rng, pesos_categoria)
+        cartas.append(pool.novo_mestre(raridade, tipo_heroi_dominado=tipo, categoria=categoria))
 
     # guardiões: no máximo max_mesmo_guardiao (1) por combinação específica
     combos_guardiao_usados: set[tuple] = set()
@@ -381,7 +436,7 @@ def montar_deck(
     while n_guardioes < contagens["guardians"] and tentativas < contagens["guardians"] * 50:
         tentativas += 1
         tipo = pool.rng.choice(config["tipos_guardiao"])
-        categoria = pool.rng.choice(config["categorias"])
+        categoria = _categoria_aleatoria_ponderada(pool.rng, pesos_categoria)
         raridade = _sortear_raridade(orcamento, pool.rng)
         combo = (tipo, categoria, raridade)
         if combo in combos_guardiao_usados:
@@ -393,36 +448,73 @@ def montar_deck(
     # juiz: no máximo max_juiz_deck (1)
     for _ in range(min(contagens["judge"], config["max_juiz_deck"])):
         raridade = _sortear_raridade(orcamento, pool.rng)
-        cartas.append(pool.novo_juiz(raridade=raridade))
+        categoria = _categoria_aleatoria_ponderada(pool.rng, pesos_categoria)
+        cartas.append(pool.novo_juiz(categoria=categoria, raridade=raridade))
 
     # itens: livres
     for _ in range(contagens["items"]):
-        cartas.append(pool.novo_item())
+        tipo_heroi = _tipo_heroi_aleatorio_ponderado(pool.rng, pesos_categoria, config)
+        cartas.append(pool.novo_item(tipo_heroi=tipo_heroi))
 
     # locais: livres
     for _ in range(contagens["locals"]):
-        cartas.append(pool.novo_local())
+        categoria = _categoria_aleatoria_ponderada(pool.rng, pesos_categoria)
+        cartas.append(pool.novo_local(categoria=categoria))
 
     # invocações: livres (preenche o restante)
     for _ in range(contagens["invocations"]):
-        cartas.append(pool.nova_invocacao())
+        categoria = _categoria_aleatoria_ponderada(pool.rng, pesos_categoria)
+        cartas.append(pool.nova_invocacao(categoria=categoria))
 
     return cartas
 
 
 def montar_deck_fraco(
-    config: dict, arquetipo: str = "balanceado", perfil_invocacoes: str = "moderado", seed: int | None = None
+    config: dict,
+    arquetipo: str = "balanceado",
+    perfil_invocacoes: str = "moderado",
+    categoria_preferida: str | None = None,
+    seed: int | None = None,
 ) -> list:
-    return montar_deck(config, faixa_forca="fraco", arquetipo=arquetipo, perfil_invocacoes=perfil_invocacoes, seed=seed)
+    return montar_deck(
+        config,
+        faixa_forca="fraco",
+        arquetipo=arquetipo,
+        perfil_invocacoes=perfil_invocacoes,
+        categoria_preferida=categoria_preferida,
+        seed=seed,
+    )
 
 
 def montar_deck_medio(
-    config: dict, arquetipo: str = "balanceado", perfil_invocacoes: str = "moderado", seed: int | None = None
+    config: dict,
+    arquetipo: str = "balanceado",
+    perfil_invocacoes: str = "moderado",
+    categoria_preferida: str | None = None,
+    seed: int | None = None,
 ) -> list:
-    return montar_deck(config, faixa_forca="medio", arquetipo=arquetipo, perfil_invocacoes=perfil_invocacoes, seed=seed)
+    return montar_deck(
+        config,
+        faixa_forca="medio",
+        arquetipo=arquetipo,
+        perfil_invocacoes=perfil_invocacoes,
+        categoria_preferida=categoria_preferida,
+        seed=seed,
+    )
 
 
 def montar_deck_forte(
-    config: dict, arquetipo: str = "balanceado", perfil_invocacoes: str = "moderado", seed: int | None = None
+    config: dict,
+    arquetipo: str = "balanceado",
+    perfil_invocacoes: str = "moderado",
+    categoria_preferida: str | None = None,
+    seed: int | None = None,
 ) -> list:
-    return montar_deck(config, faixa_forca="forte", arquetipo=arquetipo, perfil_invocacoes=perfil_invocacoes, seed=seed)
+    return montar_deck(
+        config,
+        faixa_forca="forte",
+        arquetipo=arquetipo,
+        perfil_invocacoes=perfil_invocacoes,
+        categoria_preferida=categoria_preferida,
+        seed=seed,
+    )

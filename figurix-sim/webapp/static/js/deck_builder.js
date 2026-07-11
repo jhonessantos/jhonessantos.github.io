@@ -51,6 +51,7 @@ function preencherFormularioGeracao() {
   preencherSelect("select-faixa-forca", CATALOGO.faixas_forca);
   preencherSelect("select-arquetipo", CATALOGO.arquetipos);
   preencherSelect("select-perfil-invocacao", CATALOGO.perfis_invocacao);
+  preencherSelect("select-categoria-preferida", CATALOGO.categorias, true);
 }
 
 function preencherSelect(id, opcoes, comBranco) {
@@ -79,6 +80,8 @@ async function gerarDeck() {
     arquetipo: document.getElementById("select-arquetipo").value,
     perfil_invocacoes: document.getElementById("select-perfil-invocacao").value,
   };
+  const categoriaPreferida = document.getElementById("select-categoria-preferida").value;
+  if (categoriaPreferida) params.categoria_preferida = categoriaPreferida;
   const seedTxt = document.getElementById("input-seed").value;
   if (seedTxt) params.seed = parseInt(seedTxt, 10);
 
@@ -153,14 +156,28 @@ async function salvarDeck() {
     parametros: ESTADO.parametros,
   };
   let resultado;
-  if (ESTADO.deckId) {
-    resultado = await api(`/api/decks/${ESTADO.deckId}`, { method: "PUT", body: JSON.stringify(payload) });
-  } else {
-    resultado = await api("/api/decks", { method: "POST", body: JSON.stringify(payload) });
+  try {
+    if (ESTADO.deckId) {
+      resultado = await api(`/api/decks/${ESTADO.deckId}`, { method: "PUT", body: JSON.stringify(payload) });
+    } else {
+      resultado = await api("/api/decks", { method: "POST", body: JSON.stringify(payload) });
+    }
+  } catch (e) {
+    alert(e.message);
+    return;
   }
   ESTADO.deckId = resultado.id;
   await recarregarListaDecks();
   alert("Deck salvo: " + resultado.nome);
+}
+
+async function excluirDeck(deckId, nome) {
+  if (!confirm(`Excluir o deck "${nome}"? Essa ação não pode ser desfeita.`)) return;
+  await api(`/api/decks/${deckId}`, { method: "DELETE" });
+  if (ESTADO.deckId === deckId) {
+    novoDeckEmBranco();
+  }
+  await recarregarListaDecks();
 }
 
 async function recarregarListaDecks() {
@@ -173,7 +190,12 @@ async function recarregarListaDecks() {
     item.innerHTML = `
       <div class="nome">${d.nome}</div>
       <div class="meta">${d.n_cartas} cartas ${d.parametros ? "· " + d.parametros.arquetipo : ""}</div>
+      <span class="item-deck-excluir" title="Excluir deck">✕</span>
     `;
+    item.querySelector(".item-deck-excluir").onclick = (ev) => {
+      ev.stopPropagation();
+      excluirDeck(d.id, d.nome);
+    };
     item.onclick = () => abrirDeck(d.id);
     lista.appendChild(item);
   }
