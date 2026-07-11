@@ -631,8 +631,9 @@ def acoes_legais(
                     acoes.append(Acao("invocar_juiz", {"carta": carta, "pagamento": pagamento}))
 
     if jogador.heroi_ativo.item_anexado is None:
+        tipo_do_heroi_ativo = tipo_da_variacao(jogador.heroi_ativo.carta.variacao_id, config)
         for carta in jogador.mao:
-            if isinstance(carta, ItemHeroi) and carta.tipo_heroi == jogador.heroi_ativo.carta.variacao_id:
+            if isinstance(carta, ItemHeroi) and carta.tipo_heroi == tipo_do_heroi_ativo:
                 acoes.append(Acao("anexar_item", {"carta": carta}))
 
     item_raro_anexado = (

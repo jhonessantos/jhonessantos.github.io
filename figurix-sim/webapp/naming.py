@@ -1,14 +1,15 @@
-"""Nomes de exibição para entidades sintéticas (heróis, mestres, guardiões...).
+"""Nomes de exibição para entidades sintéticas (heróis, mestres, itens, guardiões...).
 
-O motor (src/cards.py) só guarda IDs numéricos (variacao_id, tipo_heroi_dominado,
-tipo de guardião) — mas os 105 heróis (variação 1-105) TÊM nomes de
-personagem reais: 5 categorias de 21 heróis cada, e cada 21 dividido em 7
-"tipos de herói" (família temática, ex.: "Anjo") de 3 variantes cada
-(ex.: "Anjo Vigilante", "Anjo Transcendente", "Anjo de Cristal") — 35
-tipos ao todo. Um Mestre domina um TIPO inteiro, não uma variação
-específica (seção 9) — "Mestre dos Protetores" domina as 3 variações de
-Protetor. Este módulo mapeia os IDs numéricos pra esses nomes — camada de
-exibição só, não inventa nenhuma regra de jogo.
+O motor (src/cards.py) só guarda IDs numéricos (variacao_id,
+tipo_heroi_dominado, tipo_heroi, tipo de guardião) — mas os 105 heróis
+(variação 1-105) TÊM nomes de personagem reais: 5 categorias de 21
+heróis cada, e cada 21 dividido em 7 "tipos de herói" (família temática,
+ex.: "Anjo") de 3 variantes cada (ex.: "Anjo Vigilante", "Anjo
+Transcendente", "Anjo de Cristal") — 35 tipos ao todo. Mestre e Item de
+Herói se vinculam a um TIPO inteiro, não a uma variação específica
+(seção 1 e 9) — "Mestre dos Protetores"/"Item dos Protetores" valem para
+as 3 variações de Protetor. Este módulo mapeia os IDs numéricos pra
+esses nomes — camada de exibição só, não inventa nenhuma regra de jogo.
 
 A categoria/tipo de uma variação vêm de `cardpool.categorias_da_variacao`/
 `tipo_da_variacao` (a mesma lógica usada pelo motor) — importado de src/
@@ -78,11 +79,13 @@ _HEROIS_POR_CATEGORIA = {
     ],
 }
 
-# sufixo (com artigo/gênero corretos) do nome do Mestre de cada tipo de
-# herói — mesma ordem dos grupos de 3 acima. Pluralização/gênero em
-# português não são regulares o bastante pra derivar automaticamente
-# (ex.: "Centurião" -> "Centuriões"), por isso é uma lista curada.
-_SUFIXO_MESTRE_POR_CATEGORIA = {
+# sufixo (com artigo/gênero corretos) do nome de cada tipo de herói —
+# usado tanto pro Mestre ("Mestre dos Protetores") quanto pro Item
+# ("Item dos Protetores"), já que os dois se vinculam a um TIPO inteiro.
+# Mesma ordem dos grupos de 3 acima. Pluralização/gênero em português não
+# são regulares o bastante pra derivar automaticamente (ex.: "Centurião"
+# -> "Centuriões"), por isso é uma lista curada.
+_SUFIXO_TIPO_POR_CATEGORIA = {
     "Coracao": [
         "dos Anjos", "dos Curadores", "dos Druidas", "das Fadas",
         "dos Monges", "dos Pacificadores", "dos Protetores",
@@ -108,20 +111,20 @@ _SUFIXO_MESTRE_POR_CATEGORIA = {
 
 def _construir_mapas() -> tuple[dict[int, str], dict[int, str]]:
     nomes_herois: dict[int, str] = {}
-    sufixos_mestre: dict[int, str] = {}
+    sufixos_tipo: dict[int, str] = {}
     for categoria, nomes in _HEROIS_POR_CATEGORIA.items():
         ids_da_categoria = sorted(
             vid for vid in range(1, N_VARIACOES_OFICIAIS + 1) if categorias_da_variacao(vid, CONFIG)[0] == categoria
         )
         nomes_herois.update(zip(ids_da_categoria, nomes))
-        for i, sufixo in enumerate(_SUFIXO_MESTRE_POR_CATEGORIA[categoria]):
+        for i, sufixo in enumerate(_SUFIXO_TIPO_POR_CATEGORIA[categoria]):
             primeira_variacao_do_grupo = ids_da_categoria[i * 3]
             tipo_id = tipo_da_variacao(primeira_variacao_do_grupo, CONFIG)
-            sufixos_mestre[tipo_id] = sufixo
-    return nomes_herois, sufixos_mestre
+            sufixos_tipo[tipo_id] = sufixo
+    return nomes_herois, sufixos_tipo
 
 
-_NOMES_HEROIS, _SUFIXOS_MESTRE = _construir_mapas()
+_NOMES_HEROIS, _SUFIXOS_TIPO = _construir_mapas()
 
 _NOME_GUARDIAO = {
     "Portais": "Guardião dos Portais",
@@ -141,9 +144,10 @@ def nome_guardiao(tipo: str) -> str:
 
 
 def nome_mestre(tipo_heroi_dominado: int) -> str:
-    sufixo = _SUFIXOS_MESTRE.get(tipo_heroi_dominado, f"do Tipo #{tipo_heroi_dominado}")
+    sufixo = _SUFIXOS_TIPO.get(tipo_heroi_dominado, f"do Tipo #{tipo_heroi_dominado}")
     return f"Mestre {sufixo}"
 
 
 def nome_item(tipo_heroi: int) -> str:
-    return f"Item de {nome_participante(tipo_heroi)}"
+    sufixo = _SUFIXOS_TIPO.get(tipo_heroi, f"do Tipo #{tipo_heroi}")
+    return f"Item {sufixo}"

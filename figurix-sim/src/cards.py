@@ -101,7 +101,7 @@ class Heroi(Carta):
 
 @dataclass(frozen=True)
 class Mestre(Carta):
-    tipo_heroi_dominado: int = 0  # variacao_id do tipo de herói que domina
+    tipo_heroi_dominado: int = 0  # tipo_id (1-35, ver cardpool.tipo_da_variacao) do tipo de herói que domina
     categoria: str = ""
     raridade: str = "comum"
     forca_impressa: int = 0
@@ -124,7 +124,7 @@ class Juiz(Carta):
 
 @dataclass(frozen=True)
 class ItemHeroi(Carta):
-    tipo_heroi: int = 0  # variacao_id do tipo de herói ao qual está vinculado
+    tipo_heroi: int = 0  # tipo_id (1-35, ver cardpool.tipo_da_variacao) do tipo de herói ao qual está vinculado
     raridade: str = "comum"  # comum ou rara
 
 

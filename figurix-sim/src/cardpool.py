@@ -180,7 +180,7 @@ class CardPool:
         raridade: str | None = None,
     ) -> ItemHeroi:
         if tipo_heroi is None:
-            tipo_heroi = self.rng.randint(1, N_VARIACOES_OFICIAIS)
+            tipo_heroi = self.rng.randint(1, N_TIPOS_HEROI)
         if raridade is None:
             raridade = self.rng.choice(["comum", "rara"])
         return ItemHeroi(tipo_heroi=tipo_heroi, raridade=raridade)

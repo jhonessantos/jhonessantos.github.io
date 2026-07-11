@@ -4,7 +4,7 @@ precisa bater com a categoria de verdade que o motor calcula pra aquele
 variacao_id (cardpool.categorias_da_variacao) — senão o emoji/cor da
 categoria na carta e o nome do herói ficam incoerentes."""
 from cardpool import N_TIPOS_HEROI, categorias_da_variacao, tipo_da_variacao, variacoes_do_tipo
-from naming import _HEROIS_POR_CATEGORIA, _NOMES_HEROIS, _SUFIXOS_MESTRE, nome_mestre, nome_participante
+from naming import _HEROIS_POR_CATEGORIA, _NOMES_HEROIS, _SUFIXOS_TIPO, nome_item, nome_mestre, nome_participante
 
 _TIPOS_POR_CATEGORIA = {
     "Coracao": ["Anjo", "Curador", "Druida", "Fada", "Monge", "Pacificador", "Protetor"],
@@ -48,14 +48,15 @@ def test_nome_participante_exemplo_conhecido():
 
 
 # ------------------------------------------------------------------
-# Mestre: domina um TIPO de herói (35 tipos), não uma variação (105) —
-# "Mestre dos Protetores" tem que valer pras 3 variações de Protetor.
+# Mestre e Item de Herói: vinculam a um TIPO de herói (35 tipos), não a
+# uma variação (105) — "Mestre dos Protetores"/"Item dos Protetores" tem
+# que valer pras 3 variações de Protetor.
 # ------------------------------------------------------------------
 
-def test_35_tipos_com_sufixo_de_mestre_sem_duplicata():
-    assert len(_SUFIXOS_MESTRE) == N_TIPOS_HEROI
-    assert set(_SUFIXOS_MESTRE.keys()) == set(range(1, N_TIPOS_HEROI + 1))
-    assert len(set(_SUFIXOS_MESTRE.values())) == N_TIPOS_HEROI
+def test_35_tipos_com_sufixo_sem_duplicata():
+    assert len(_SUFIXOS_TIPO) == N_TIPOS_HEROI
+    assert set(_SUFIXOS_TIPO.keys()) == set(range(1, N_TIPOS_HEROI + 1))
+    assert len(set(_SUFIXOS_TIPO.values())) == N_TIPOS_HEROI
 
 
 def test_nome_mestre_exemplo_conhecido(config):
@@ -93,3 +94,13 @@ def test_nome_mestre_pluralizacao_irregular_curada(config):
         variacao = next(vid for vid, nome in _NOMES_HEROIS.items() if nome.startswith(tipo_singular))
         tipo_id = tipo_da_variacao(variacao, config)
         assert nome_mestre(tipo_id) == esperado
+
+
+def test_nome_item_usa_o_mesmo_sufixo_de_tipo_que_o_mestre(config):
+    variacao_protetor = next(vid for vid, nome in _NOMES_HEROIS.items() if nome.startswith("Protetor"))
+    tipo_dos_protetores = tipo_da_variacao(variacao_protetor, config)
+    assert nome_item(tipo_dos_protetores) == "Item dos Protetores"
+
+
+def test_nome_item_fora_do_range_nao_quebra():
+    assert nome_item(999) == "Item do Tipo #999"
