@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import random
 import sys
+import uuid
 from pathlib import Path
 from typing import Any, Optional
 
@@ -27,6 +28,7 @@ from cardpool import CardPool, N_VARIACOES_OFICIAIS, montar_deck  # noqa: E402
 from config import carregar_config  # noqa: E402
 from deck import contar_por_tipo, validar_deck  # noqa: E402
 from lote_runner import iniciar_lote_em_background  # noqa: E402
+from lotes_combinacoes import gerar_combinacoes, nome_da_combinacao, seed_da_combinacao  # noqa: E402
 
 app = FastAPI(title="Figurix Studio")
 CONFIG = carregar_config()
@@ -256,30 +258,73 @@ def criar_lote(entrada: LoteEntrada) -> dict:
     seed_base = entrada.seed_base if entrada.seed_base is not None else random.randrange(2**31)
     nome = entrada.nome or f"{entrada.ia_a_chave} x {entrada.ia_b_chave} — {deck_a['nome']} x {deck_b['nome']}"
 
-    lote_id = db.criar_lote(
+    lote_id = _criar_e_iniciar_lote(
         nome=nome,
         ia_a_chave=entrada.ia_a_chave,
         ia_b_chave=entrada.ia_b_chave,
+        deck_a=deck_a,
+        deck_b=deck_b,
         deck_a_id=entrada.deck_a_id,
         deck_b_id=entrada.deck_b_id,
-        deck_a_nome=deck_a["nome"],
-        deck_b_nome=deck_b["nome"],
         n_partidas=entrada.n_partidas,
         seed_base=seed_base,
     )
-
-    iniciar_lote_em_background(
-        lote_id=lote_id,
-        config=CONFIG,
-        deck_a_cartas=deck_a["cartas"],
-        deck_b_cartas=deck_b["cartas"],
-        ia_a_chave=entrada.ia_a_chave,
-        ia_b_chave=entrada.ia_b_chave,
-        n_partidas=entrada.n_partidas,
-        seed_base=seed_base,
-    )
-
     return db.obter_lote(lote_id)
+
+
+class LoteCombinacoesEntrada(BaseModel):
+    nome_grupo: Optional[str] = None
+    ia_a_chaves: list[str]
+    ia_b_chaves: list[str]
+    deck_a_ids: list[int]
+    deck_b_ids: list[int]
+    n_partidas: int
+    seed_base: Optional[int] = None
+
+
+@app.post("/api/lotes/combinacoes")
+def criar_lotes_combinacoes(entrada: LoteCombinacoesEntrada) -> dict:
+    """"Rodar tudo de uma vez": M IAs do lado A x N do lado B x P decks A x
+    Q decks B vira M*N*P*Q lotes independentes, cada um com `n_partidas`
+    partidas — a quantidade pedida vale POR combinação, não no total."""
+    if not (entrada.ia_a_chaves and entrada.ia_b_chaves and entrada.deck_a_ids and entrada.deck_b_ids):
+        raise HTTPException(status_code=400, detail="Selecione ao menos uma IA e um deck para cada lado")
+    if entrada.n_partidas < 1:
+        raise HTTPException(status_code=400, detail="n_partidas precisa ser >= 1")
+
+    ias_validas = {ia["chave"] for ia in listar_ias()}
+    desconhecidas = sorted({*entrada.ia_a_chaves, *entrada.ia_b_chaves} - ias_validas)
+    if desconhecidas:
+        raise HTTPException(status_code=400, detail=f"IA(s) desconhecida(s): {desconhecidas}")
+
+    decks = {deck_id: db.obter_deck(deck_id) for deck_id in {*entrada.deck_a_ids, *entrada.deck_b_ids}}
+    faltando = sorted(deck_id for deck_id, deck in decks.items() if deck is None)
+    if faltando:
+        raise HTTPException(status_code=404, detail=f"Deck(s) não encontrado(s): {faltando}")
+
+    grupo_id = uuid.uuid4().hex[:12]
+    seed_base_grupo = entrada.seed_base if entrada.seed_base is not None else random.randrange(2**31)
+
+    lote_ids = []
+    combinacoes = gerar_combinacoes(entrada.ia_a_chaves, entrada.ia_b_chaves, entrada.deck_a_ids, entrada.deck_b_ids)
+    for indice, (ia_a, ia_b, deck_a_id, deck_b_id) in enumerate(combinacoes):
+        deck_a, deck_b = decks[deck_a_id], decks[deck_b_id]
+        nome = nome_da_combinacao(entrada.nome_grupo, ia_a, ia_b, deck_a["nome"], deck_b["nome"])
+        lote_id = _criar_e_iniciar_lote(
+            nome=nome,
+            ia_a_chave=ia_a,
+            ia_b_chave=ia_b,
+            deck_a=deck_a,
+            deck_b=deck_b,
+            deck_a_id=deck_a_id,
+            deck_b_id=deck_b_id,
+            n_partidas=entrada.n_partidas,
+            seed_base=seed_da_combinacao(seed_base_grupo, indice),
+            grupo_id=grupo_id,
+        )
+        lote_ids.append(lote_id)
+
+    return {"grupo_id": grupo_id, "lote_ids": lote_ids, "total_combinacoes": len(lote_ids)}
 
 
 @app.get("/api/lotes")
@@ -294,6 +339,13 @@ def obter_lote(lote_id: int) -> dict:
         raise HTTPException(status_code=404, detail="Lote não encontrado")
     lote["resumo_vitorias"] = db.resumo_vitorias_lote(lote_id)
     return lote
+
+
+@app.get("/api/lotes/{lote_id}/estatisticas")
+def estatisticas_do_lote(lote_id: int) -> dict:
+    if db.obter_lote(lote_id) is None:
+        raise HTTPException(status_code=404, detail="Lote não encontrado")
+    return db.estatisticas_lote(lote_id)
 
 
 @app.get("/api/lotes/{lote_id}/partidas")
@@ -314,6 +366,46 @@ def excluir_lote(lote_id: int) -> dict:
 # ------------------------------------------------------------------
 # Helpers
 # ------------------------------------------------------------------
+
+def _criar_e_iniciar_lote(
+    nome: str,
+    ia_a_chave: str,
+    ia_b_chave: str,
+    deck_a: dict,
+    deck_b: dict,
+    deck_a_id: int,
+    deck_b_id: int,
+    n_partidas: int,
+    seed_base: int,
+    grupo_id: str | None = None,
+) -> int:
+    """Compartilhado por /api/lotes (1 combinação) e /api/lotes/combinacoes
+    (produto cartesiano de várias) — cria a linha do lote e enfileira a
+    execução, sem duplicar essa lógica nos dois endpoints."""
+    lote_id = db.criar_lote(
+        nome=nome,
+        ia_a_chave=ia_a_chave,
+        ia_b_chave=ia_b_chave,
+        deck_a_id=deck_a_id,
+        deck_b_id=deck_b_id,
+        deck_a_nome=deck_a["nome"],
+        deck_b_nome=deck_b["nome"],
+        n_partidas=n_partidas,
+        seed_base=seed_base,
+        grupo_id=grupo_id,
+    )
+    iniciar_lote_em_background(
+        lote_id=lote_id,
+        config=CONFIG,
+        deck_a_cartas=deck_a["cartas"],
+        deck_b_cartas=deck_b["cartas"],
+        ia_a_chave=ia_a_chave,
+        ia_b_chave=ia_b_chave,
+        n_partidas=n_partidas,
+        seed_base=seed_base,
+    )
+    return lote_id
+
 
 def _resposta_cartas(cartas: list, parametros: dict | None) -> dict:
     violacoes = validar_deck(cartas, CONFIG)

@@ -1,10 +1,18 @@
 """Executor de lotes de simulação em segundo plano.
 
-Roda numa thread daemon (não bloqueia a API) e grava os resultados
-direto no SQLite em lotes de escrita (não 1 INSERT por partida — isso
-seria o gargalo real em lotes de milhões de partidas). O progresso fica
-visível via `db.obter_lote` a qualquer momento, mesmo com o lote ainda
-rodando.
+Roda numa fila com um número FIXO de workers (não bloqueia a API) e grava
+os resultados direto no SQLite em lotes de escrita (não 1 INSERT por
+partida — isso seria o gargalo real em lotes de milhões de partidas). O
+progresso fica visível via `db.obter_lote` a qualquer momento, mesmo com
+o lote ainda rodando.
+
+A fila existe porque "rodar todas as combinações" (múltiplas IAs x
+múltiplos decks de cada lado) pode enfileirar dezenas ou centenas de
+lotes de uma vez — disparar uma thread por lote sem limite não ajudaria
+em nada (o motor é Python puro/CPU-bound, então threads competem pelo
+GIL) e ainda estouraria memória/overhead de milhares de threads. Um
+número pequeno e fixo de workers processa a fila em ordem, mantendo todo
+o resto do fluxo (status "pendente" -> "rodando" -> "concluido") igual.
 
 Cada partida é reprodutível individualmente a partir do que fica salvo
 na linha de `lotes` (decks, IAs) + a seed daquela partida específica —
@@ -13,6 +21,7 @@ guardar o log completo de cada uma das milhões de partidas.
 """
 from __future__ import annotations
 
+import queue
 import sys
 import threading
 import traceback
@@ -29,6 +38,30 @@ from match import jogar_partida  # noqa: E402
 from tournament import resumir_resultado  # noqa: E402
 
 TAMANHO_LOTE_ESCRITA = 200  # quantas partidas acumular antes de gravar no banco
+N_WORKERS = 3  # concorrência da fila de lotes (ver docstring do módulo)
+
+_fila: "queue.Queue[dict]" = queue.Queue()
+_workers_iniciados = False
+_trava_workers = threading.Lock()
+
+
+def _worker_da_fila() -> None:
+    while True:
+        job = _fila.get()
+        try:
+            _rodar_lote(**job)
+        finally:
+            _fila.task_done()
+
+
+def _garantir_workers() -> None:
+    global _workers_iniciados
+    with _trava_workers:
+        if _workers_iniciados:
+            return
+        for _ in range(N_WORKERS):
+            threading.Thread(target=_worker_da_fila, daemon=True).start()
+        _workers_iniciados = True
 
 
 def iniciar_lote_em_background(
@@ -41,12 +74,19 @@ def iniciar_lote_em_background(
     n_partidas: int,
     seed_base: int,
 ) -> None:
-    thread = threading.Thread(
-        target=_rodar_lote,
-        args=(lote_id, config, deck_a_cartas, deck_b_cartas, ia_a_chave, ia_b_chave, n_partidas, seed_base),
-        daemon=True,
+    _garantir_workers()
+    _fila.put(
+        dict(
+            lote_id=lote_id,
+            config=config,
+            deck_a_cartas=deck_a_cartas,
+            deck_b_cartas=deck_b_cartas,
+            ia_a_chave=ia_a_chave,
+            ia_b_chave=ia_b_chave,
+            n_partidas=n_partidas,
+            seed_base=seed_base,
+        )
     )
-    thread.start()
 
 
 def _rodar_lote(

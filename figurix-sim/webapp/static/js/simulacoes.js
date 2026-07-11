@@ -1,6 +1,9 @@
 let IAS = [];
 let DECKS = [];
 const RESUMOS_CACHE = {}; // lote_id -> resumo_vitorias (só preciso buscar 1x depois de concluído)
+const ESTATISTICAS_CACHE = {}; // lote_id -> estatísticas detalhadas (só busca quando o usuário abre o relatório)
+const RELATORIOS_ABERTOS = new Set(); // lote_ids com o painel de relatório expandido
+const GRUPOS_COLAPSADOS = new Set(); // grupo_ids com a lista de combinações recolhida
 
 async function api(caminho, opcoes) {
   const resposta = await fetch(caminho, {
@@ -16,18 +19,22 @@ async function api(caminho, opcoes) {
 
 async function iniciar() {
   [IAS, DECKS] = await Promise.all([api("/api/ias"), api("/api/decks")]);
-  preencherSelect("select-ia-a", IAS, (ia) => ia.chave, (ia) => `${ia.rotulo} (${ia.categoria})`);
-  preencherSelect("select-ia-b", IAS, (ia) => ia.chave, (ia) => `${ia.rotulo} (${ia.categoria})`);
-  preencherSelect("select-deck-a", DECKS, (d) => d.id, (d) => `${d.nome} (${d.n_cartas} cartas)`);
-  preencherSelect("select-deck-b", DECKS, (d) => d.id, (d) => `${d.nome} (${d.n_cartas} cartas)`);
+  preencherSelectMultiplo("select-ia-a", IAS, (ia) => ia.chave, (ia) => `${ia.rotulo} (${ia.categoria})`);
+  preencherSelectMultiplo("select-ia-b", IAS, (ia) => ia.chave, (ia) => `${ia.rotulo} (${ia.categoria})`);
+  preencherSelectMultiplo("select-deck-a", DECKS, (d) => d.id, (d) => `${d.nome} (${d.n_cartas} cartas)`);
+  preencherSelectMultiplo("select-deck-b", DECKS, (d) => d.id, (d) => `${d.nome} (${d.n_cartas} cartas)`);
 
   document.getElementById("btn-rodar").onclick = rodarLote;
+  for (const id of ["select-ia-a", "select-ia-b", "select-deck-a", "select-deck-b", "input-n-partidas"]) {
+    document.getElementById(id).addEventListener("change", atualizarPreviewCombinacoes);
+  }
+  atualizarPreviewCombinacoes();
 
   await atualizarListaLotes();
   setInterval(atualizarListaLotes, 1500);
 }
 
-function preencherSelect(id, itens, valorDe, rotuloDe) {
+function preencherSelectMultiplo(id, itens, valorDe, rotuloDe) {
   const select = document.getElementById(id);
   select.innerHTML = "";
   for (const item of itens) {
@@ -36,6 +43,11 @@ function preencherSelect(id, itens, valorDe, rotuloDe) {
     opt.textContent = rotuloDe(item);
     select.appendChild(opt);
   }
+  if (select.options.length > 0) select.options[0].selected = true;
+}
+
+function valoresSelecionados(id) {
+  return [...document.getElementById(id).selectedOptions].map((o) => o.value);
 }
 
 function mostrarErro(mensagem) {
@@ -50,22 +62,42 @@ function mostrarErro(mensagem) {
   div.textContent = mensagem;
 }
 
+function atualizarPreviewCombinacoes() {
+  const nIaA = valoresSelecionados("select-ia-a").length;
+  const nIaB = valoresSelecionados("select-ia-b").length;
+  const nDeckA = valoresSelecionados("select-deck-a").length;
+  const nDeckB = valoresSelecionados("select-deck-b").length;
+  const nPartidas = parseInt(document.getElementById("input-n-partidas").value, 10) || 0;
+  const totalCombinacoes = nIaA * nIaB * nDeckA * nDeckB;
+
+  const div = document.getElementById("preview-combinacoes");
+  if (totalCombinacoes === 0) {
+    div.innerHTML = "Selecione ao menos uma IA e um deck para cada lado.";
+    return;
+  }
+  div.innerHTML = `
+    Isso vai gerar <strong>${totalCombinacoes}</strong> lote(s)
+    (${nIaA} IA(s) A × ${nIaB} IA(s) B × ${nDeckA} deck(s) A × ${nDeckB} deck(s) B),
+    ${nPartidas} partida(s) cada — <strong>${totalCombinacoes * nPartidas}</strong> partidas no total.
+  `;
+}
+
 async function rodarLote() {
   mostrarErro(null);
   const payload = {
-    ia_a_chave: document.getElementById("select-ia-a").value,
-    ia_b_chave: document.getElementById("select-ia-b").value,
-    deck_a_id: parseInt(document.getElementById("select-deck-a").value, 10),
-    deck_b_id: parseInt(document.getElementById("select-deck-b").value, 10),
+    ia_a_chaves: valoresSelecionados("select-ia-a"),
+    ia_b_chaves: valoresSelecionados("select-ia-b"),
+    deck_a_ids: valoresSelecionados("select-deck-a").map((v) => parseInt(v, 10)),
+    deck_b_ids: valoresSelecionados("select-deck-b").map((v) => parseInt(v, 10)),
     n_partidas: parseInt(document.getElementById("input-n-partidas").value, 10),
   };
   const seedTxt = document.getElementById("input-seed-base").value;
   if (seedTxt) payload.seed_base = parseInt(seedTxt, 10);
   const nomeTxt = document.getElementById("input-nome-lote").value;
-  if (nomeTxt) payload.nome = nomeTxt;
+  if (nomeTxt) payload.nome_grupo = nomeTxt;
 
   try {
-    await api("/api/lotes", { method: "POST", body: JSON.stringify(payload) });
+    await api("/api/lotes/combinacoes", { method: "POST", body: JSON.stringify(payload) });
     document.getElementById("input-nome-lote").value = "";
     await atualizarListaLotes();
   } catch (e) {
@@ -82,20 +114,137 @@ async function atualizarListaLotes() {
       const detalhe = await api(`/api/lotes/${lote.id}`);
       RESUMOS_CACHE[lote.id] = detalhe.resumo_vitorias;
     }
+    if (RELATORIOS_ABERTOS.has(lote.id) && !ESTATISTICAS_CACHE[lote.id] && lote.status === "concluido") {
+      ESTATISTICAS_CACHE[lote.id] = await api(`/api/lotes/${lote.id}/estatisticas`);
+    }
   }
 
   const lista = document.getElementById("lista-lotes");
   lista.innerHTML = "";
+
+  const avulsos = lotes.filter((l) => !l.grupo_id);
+  const grupos = new Map();
   for (const lote of lotes) {
+    if (!lote.grupo_id) continue;
+    if (!grupos.has(lote.grupo_id)) grupos.set(lote.grupo_id, []);
+    grupos.get(lote.grupo_id).push(lote);
+  }
+
+  for (const [grupoId, lotesDoGrupo] of grupos) {
+    lista.appendChild(criarCardGrupo(grupoId, lotesDoGrupo));
+  }
+  for (const lote of avulsos) {
     lista.appendChild(criarCardLote(lote));
   }
+}
+
+function criarCardGrupo(grupoId, lotesDoGrupo) {
+  const div = document.createElement("div");
+  div.className = "grupo-lotes";
+
+  const concluidos = lotesDoGrupo.filter((l) => l.status === "concluido").length;
+  const colapsado = GRUPOS_COLAPSADOS.has(grupoId);
+  const nomeBase = lotesDoGrupo[0].nome.includes(" — ") ? lotesDoGrupo[0].nome.split(" — ")[0] : "Combinações";
+
+  const cabecalho = document.createElement("div");
+  cabecalho.className = "grupo-cabecalho";
+  cabecalho.innerHTML = `
+    <span class="grupo-titulo"><span class="grupo-seta ${colapsado ? "colapsada" : ""}">▾</span> ${nomeBase} (${lotesDoGrupo.length} combinações)</span>
+    <span class="grupo-progresso">${concluidos} / ${lotesDoGrupo.length} concluídos</span>
+  `;
+  cabecalho.onclick = () => {
+    if (GRUPOS_COLAPSADOS.has(grupoId)) GRUPOS_COLAPSADOS.delete(grupoId);
+    else GRUPOS_COLAPSADOS.add(grupoId);
+    atualizarListaLotes();
+  };
+
+  const corpo = document.createElement("div");
+  corpo.className = "grupo-corpo" + (colapsado ? " colapsado" : "");
+  for (const lote of lotesDoGrupo) {
+    corpo.appendChild(criarCardLote(lote));
+  }
+
+  div.appendChild(cabecalho);
+  div.appendChild(corpo);
+  return div;
+}
+
+function pct(fracao, casas = 1) {
+  if (fracao === null || fracao === undefined) return "—";
+  return (fracao * 100).toFixed(casas) + "%";
+}
+
+function num(valor, casas = 1) {
+  if (valor === null || valor === undefined) return "—";
+  return Number(valor).toFixed(casas);
+}
+
+function criarRelatorioDetalhado(stats) {
+  if (!stats || stats.total === 0) {
+    return `<div class="relatorio-detalhado">Sem partidas registradas ainda.</div>`;
+  }
+  const eventosOrdenados = Object.entries(stats.eventos_media_por_partida || {}).sort((a, b) => b[1] - a[1]);
+
+  return `
+    <div class="relatorio-detalhado">
+      <div class="relatorio-secao">
+        <div class="rotulo-secao">Duração (turnos)</div>
+        <div class="relatorio-grade">
+          <div class="relatorio-item"><div class="valor">${num(stats.turnos.media)}</div><div class="rotulo">média</div></div>
+          <div class="relatorio-item"><div class="valor">${num(stats.turnos.mediana, 0)}</div><div class="rotulo">mediana</div></div>
+          <div class="relatorio-item"><div class="valor">${stats.turnos.min}–${stats.turnos.max}</div><div class="rotulo">min–max</div></div>
+          <div class="relatorio-item"><div class="valor">${num(stats.turnos.media_metade_mais_curta)}</div><div class="rotulo">média partidas curtas</div></div>
+          <div class="relatorio-item"><div class="valor">${num(stats.turnos.media_metade_mais_longa)}</div><div class="rotulo">média partidas longas</div></div>
+        </div>
+      </div>
+
+      <div class="relatorio-secao">
+        <div class="rotulo-secao">Duração (rodadas)</div>
+        <div class="relatorio-grade">
+          <div class="relatorio-item"><div class="valor">${num(stats.rodadas.media)}</div><div class="rotulo">média</div></div>
+          <div class="relatorio-item"><div class="valor">${num(stats.rodadas.mediana, 0)}</div><div class="rotulo">mediana</div></div>
+          <div class="relatorio-item"><div class="valor">${stats.rodadas.min}–${stats.rodadas.max}</div><div class="rotulo">min–max</div></div>
+        </div>
+      </div>
+
+      <div class="relatorio-secao">
+        <div class="rotulo-secao">Pontuação</div>
+        <div class="relatorio-grade">
+          <div class="relatorio-item"><div class="valor">${num(stats.pontos.media_pontos_a)}</div><div class="rotulo">média pontos A</div></div>
+          <div class="relatorio-item"><div class="valor">${num(stats.pontos.media_pontos_b)}</div><div class="rotulo">média pontos B</div></div>
+          <div class="relatorio-item"><div class="valor">${num(stats.pontos.media_diferenca)}</div><div class="rotulo">diferença média</div></div>
+          <div class="relatorio-item"><div class="valor">${stats.pontos.maior_margem}</div><div class="rotulo">maior margem</div></div>
+        </div>
+      </div>
+
+      <div class="relatorio-secao">
+        <div class="rotulo-secao">Mecânicas</div>
+        <div class="relatorio-grade">
+          <div class="relatorio-item"><div class="valor">${pct(stats.taxa_comeback)}</div><div class="rotulo">partidas com virada</div></div>
+          <div class="relatorio-item"><div class="valor">${pct(stats.vantagem_primeiro_jogador.taxa_vitoria_jogando_primeiro)}</div><div class="rotulo">vitória jogando 1º</div></div>
+          <div class="relatorio-item"><div class="valor">${pct(stats.taxa_juiz.a)} / ${pct(stats.taxa_juiz.b)}</div><div class="rotulo">Juiz invocado (A / B)</div></div>
+          <div class="relatorio-item"><div class="valor">${pct(stats.taxa_espiral.a)} / ${pct(stats.taxa_espiral.b)}</div><div class="rotulo">espiral de busca (A / B)</div></div>
+          <div class="relatorio-item"><div class="valor">${pct(stats.taxa_mulligan_desistencia.a)} / ${pct(stats.taxa_mulligan_desistencia.b)}</div><div class="rotulo">desistência de mão (A / B)</div></div>
+        </div>
+      </div>
+
+      ${eventosOrdenados.length > 0 ? `
+      <div class="relatorio-secao">
+        <div class="rotulo-secao">Eventos em média por partida</div>
+        <div class="relatorio-eventos">
+          ${eventosOrdenados.map(([chave, media]) => `<span class="pill-evento">${chave}: ${num(media, 2)}</span>`).join("")}
+        </div>
+      </div>
+      ` : ""}
+    </div>
+  `;
 }
 
 function criarCardLote(lote) {
   const div = document.createElement("div");
   div.className = "card-lote";
 
-  const pct = lote.n_partidas > 0 ? Math.round((100 * lote.progresso) / lote.n_partidas) : 0;
+  const pctProgresso = lote.n_partidas > 0 ? Math.round((100 * lote.progresso) / lote.n_partidas) : 0;
 
   let resumoHtml = "";
   const resumo = RESUMOS_CACHE[lote.id];
@@ -111,22 +260,46 @@ function criarCardLote(lote) {
     `;
   }
 
+  const relatorioAberto = RELATORIOS_ABERTOS.has(lote.id);
+  const relatorioHtml = relatorioAberto ? criarRelatorioDetalhado(ESTATISTICAS_CACHE[lote.id]) : "";
+
   div.innerHTML = `
     <div class="cabecalho">
       <div class="titulo">${lote.nome}</div>
       <div class="status ${lote.status}">${lote.status}</div>
     </div>
     <div class="meta">${lote.deck_a_nome} vs ${lote.deck_b_nome} · seed base ${lote.seed_base}</div>
-    <div class="barra-progresso"><div class="preenchimento" style="width:${pct}%"></div></div>
+    <div class="barra-progresso"><div class="preenchimento" style="width:${pctProgresso}%"></div></div>
     <div class="meta">${lote.progresso} / ${lote.n_partidas} partidas</div>
     ${resumoHtml}
     ${lote.erro_mensagem ? `<div class="erro-mensagem">${lote.erro_mensagem}</div>` : ""}
-    <div class="acoes"><button class="perigo" data-id="${lote.id}">Excluir</button></div>
+    <div class="acoes">
+      ${lote.status === "concluido" ? `<button class="secundario" data-acao="relatorio" data-id="${lote.id}">${relatorioAberto ? "Ocultar relatório" : "Ver relatório"}</button>` : ""}
+      <button class="perigo" data-acao="excluir" data-id="${lote.id}">Excluir</button>
+    </div>
+    ${relatorioHtml}
   `;
 
-  div.querySelector(".acoes button").onclick = async () => {
+  const btnRelatorio = div.querySelector('[data-acao="relatorio"]');
+  if (btnRelatorio) {
+    btnRelatorio.onclick = async () => {
+      if (RELATORIOS_ABERTOS.has(lote.id)) {
+        RELATORIOS_ABERTOS.delete(lote.id);
+      } else {
+        RELATORIOS_ABERTOS.add(lote.id);
+        if (!ESTATISTICAS_CACHE[lote.id]) {
+          ESTATISTICAS_CACHE[lote.id] = await api(`/api/lotes/${lote.id}/estatisticas`);
+        }
+      }
+      atualizarListaLotes();
+    };
+  }
+
+  div.querySelector('[data-acao="excluir"]').onclick = async () => {
     await api(`/api/lotes/${lote.id}`, { method: "DELETE" });
     delete RESUMOS_CACHE[lote.id];
+    delete ESTATISTICAS_CACHE[lote.id];
+    RELATORIOS_ABERTOS.delete(lote.id);
     await atualizarListaLotes();
   };
 

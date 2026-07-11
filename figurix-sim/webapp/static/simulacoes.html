@@ -13,12 +13,55 @@
       align-items: start;
     }
     .lista-lotes { display: flex; flex-direction: column; gap: 10px; }
+    select[multiple] { height: auto; }
+    .dica-multiselecao {
+      font-size: 10.5px;
+      color: var(--texto-fraco);
+      margin: 2px 0 8px;
+    }
+    .preview-combinacoes {
+      font-size: 11.5px;
+      color: var(--texto-fraco);
+      background: var(--bg-painel-2);
+      border: 1px solid var(--borda);
+      border-radius: 8px;
+      padding: 8px 10px;
+      margin: 10px 0;
+    }
+    .preview-combinacoes strong { color: var(--texto); }
+    .grupo-lotes {
+      border: 1px solid var(--borda);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .grupo-cabecalho {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      background: var(--bg-painel-2);
+      cursor: pointer;
+      font-size: 12.5px;
+    }
+    .grupo-titulo { font-weight: 600; }
+    .grupo-progresso { color: var(--texto-fraco); font-size: 11px; }
+    .grupo-corpo {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 10px;
+    }
+    .grupo-corpo.colapsado { display: none; }
+    .grupo-seta { transition: transform 0.15s; }
+    .grupo-seta.colapsada { transform: rotate(-90deg); }
     .card-lote {
       background: var(--bg-painel-2);
       border: 1px solid var(--borda);
       border-radius: 10px;
       padding: 12px 14px;
     }
+    .grupo-corpo .card-lote { background: var(--bg); }
     .card-lote .cabecalho {
       display: flex;
       justify-content: space-between;
@@ -70,6 +113,7 @@
       margin-top: 0;
       padding: 4px 10px;
       font-size: 11px;
+      margin-left: 6px;
     }
     .erro-mensagem {
       margin-top: 6px;
@@ -78,6 +122,44 @@
       white-space: pre-wrap;
       max-height: 100px;
       overflow-y: auto;
+    }
+    .relatorio-detalhado {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px dashed var(--borda);
+      font-size: 11.5px;
+    }
+    .relatorio-secao { margin-bottom: 8px; }
+    .relatorio-secao .rotulo-secao {
+      font-weight: 600;
+      color: var(--texto-fraco);
+      text-transform: uppercase;
+      font-size: 10px;
+      letter-spacing: 0.03em;
+      margin-bottom: 3px;
+    }
+    .relatorio-grade {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+      gap: 6px;
+    }
+    .relatorio-item {
+      background: var(--bg);
+      border-radius: 6px;
+      padding: 5px 8px;
+    }
+    .relatorio-item .valor { font-weight: 600; }
+    .relatorio-item .rotulo { color: var(--texto-fraco); font-size: 10px; }
+    .relatorio-eventos {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+    .pill-evento {
+      background: var(--bg);
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 10.5px;
     }
   </style>
 </head>
@@ -99,28 +181,36 @@
     <div class="painel">
       <h2>Nova simulação em lote</h2>
 
-      <label>IA do lado A</label>
-      <select id="select-ia-a"></select>
+      <label>IA(s) do lado A</label>
+      <select id="select-ia-a" multiple size="4"></select>
 
-      <label>IA do lado B</label>
-      <select id="select-ia-b"></select>
+      <label>IA(s) do lado B</label>
+      <select id="select-ia-b" multiple size="4"></select>
 
-      <label>Deck do lado A</label>
-      <select id="select-deck-a"></select>
+      <label>Deck(s) do lado A</label>
+      <select id="select-deck-a" multiple size="4"></select>
 
-      <label>Deck do lado B</label>
-      <select id="select-deck-b"></select>
+      <label>Deck(s) do lado B</label>
+      <select id="select-deck-b" multiple size="4"></select>
 
-      <label>Quantidade de partidas</label>
+      <p class="dica-multiselecao">
+        Segure Ctrl (ou Cmd no Mac) pra selecionar vários. Cada combinação de
+        IA x IA x Deck x Deck vira um lote próprio, todos rodando com a
+        mesma quantidade de partidas abaixo.
+      </p>
+
+      <label>Quantidade de partidas (por combinação)</label>
       <input type="number" id="input-n-partidas" value="100" min="1" />
 
       <label>Seed base (opcional)</label>
       <input type="number" id="input-seed-base" placeholder="aleatória" />
 
-      <label>Nome do lote (opcional)</label>
+      <label>Nome do grupo (opcional)</label>
       <input type="text" id="input-nome-lote" placeholder="gerado automaticamente" />
 
-      <button id="btn-rodar">Rodar lote</button>
+      <div class="preview-combinacoes" id="preview-combinacoes"></div>
+
+      <button id="btn-rodar">Rodar simulação</button>
       <div id="mensagem-erro" class="violacoes" style="display:none"></div>
     </div>
 

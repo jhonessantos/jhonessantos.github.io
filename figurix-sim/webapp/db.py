@@ -63,12 +63,14 @@ def inicializar_banco() -> None:
                 deck_b_nome TEXT NOT NULL,
                 n_partidas INTEGER NOT NULL,
                 seed_base INTEGER NOT NULL,
+                grupo_id TEXT,
                 status TEXT NOT NULL DEFAULT 'pendente',
                 progresso INTEGER NOT NULL DEFAULT 0,
                 erro_mensagem TEXT
             )
             """
         )
+        _adicionar_coluna_se_faltando(conn, "lotes", "grupo_id", "TEXT")
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS partidas (
@@ -92,6 +94,21 @@ def inicializar_banco() -> None:
             """
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_partidas_lote ON partidas(lote_id)")
+        # (lote_id, turnos)/(lote_id, rodadas): o relatório detalhado (seção de
+        # estatísticas) busca mediana/quartis via ORDER BY + LIMIT/OFFSET —
+        # sem esses índices, isso seria uma ordenação completa da tabela toda
+        # vez, inviável em lotes de milhões de partidas (rodando por horas).
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_partidas_lote_turnos ON partidas(lote_id, turnos)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_partidas_lote_rodadas ON partidas(lote_id, rodadas)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_lotes_grupo ON lotes(grupo_id)")
+
+
+def _adicionar_coluna_se_faltando(conn: sqlite3.Connection, tabela: str, coluna: str, definicao_tipo: str) -> None:
+    """Migração simples para bancos já existentes de antes desta coluna
+    existir — CREATE TABLE IF NOT EXISTS não altera uma tabela já criada."""
+    colunas = {linha["name"] for linha in conn.execute(f"PRAGMA table_info({tabela})").fetchall()}
+    if coluna not in colunas:
+        conn.execute(f"ALTER TABLE {tabela} ADD COLUMN {coluna} {definicao_tipo}")
 
 
 def nome_de_deck_em_uso(nome: str, excluir_id: int | None = None) -> bool:
@@ -182,6 +199,7 @@ def criar_lote(
     deck_b_nome: str,
     n_partidas: int,
     seed_base: int,
+    grupo_id: str | None = None,
 ) -> int:
     agora = datetime.now(timezone.utc).isoformat()
     with _conexao() as conn:
@@ -189,10 +207,13 @@ def criar_lote(
             """
             INSERT INTO lotes (
                 nome, criado_em, ia_a_chave, ia_b_chave, deck_a_id, deck_b_id,
-                deck_a_nome, deck_b_nome, n_partidas, seed_base, status, progresso
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pendente', 0)
+                deck_a_nome, deck_b_nome, n_partidas, seed_base, grupo_id, status, progresso
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pendente', 0)
             """,
-            (nome, agora, ia_a_chave, ia_b_chave, deck_a_id, deck_b_id, deck_a_nome, deck_b_nome, n_partidas, seed_base),
+            (
+                nome, agora, ia_a_chave, ia_b_chave, deck_a_id, deck_b_id,
+                deck_a_nome, deck_b_nome, n_partidas, seed_base, grupo_id,
+            ),
         )
         return cursor.lastrowid
 
@@ -290,6 +311,124 @@ def resumo_vitorias_lote(lote_id: int) -> dict:
             (lote_id,),
         ).fetchone()
     return dict(linha)
+
+
+def _percentil(conn: sqlite3.Connection, lote_id: int, coluna: str, fracao: float, total: int) -> float | None:
+    """Percentil via ORDER BY + LIMIT/OFFSET (usa o índice (lote_id, coluna) —
+    não precisa carregar/ordenar tudo em Python nem em memória)."""
+    if total == 0:
+        return None
+    offset = min(total - 1, int(total * fracao))
+    linha = conn.execute(
+        f"SELECT {coluna} AS v FROM partidas WHERE lote_id = ? ORDER BY {coluna} ASC LIMIT 1 OFFSET ?",
+        (lote_id, offset),
+    ).fetchone()
+    return linha["v"]
+
+
+def estatisticas_lote(lote_id: int) -> dict:
+    """Relatório detalhado de UM lote: além de vitórias/derrotas, distribuição
+    de duração (turnos/rodadas — incluindo a média separada das partidas mais
+    curtas vs. mais longas, cortando na mediana), pontuação, taxas de uso das
+    mecânicas (comeback, Juiz, espiral de busca, desistência de mão) por
+    papel, vantagem de jogar primeiro e a média de eventos por partida."""
+    with _conexao() as conn:
+        total = conn.execute("SELECT COUNT(*) AS n FROM partidas WHERE lote_id = ?", (lote_id,)).fetchone()["n"]
+        if total == 0:
+            return {"total": 0}
+
+        agregados = dict(
+            conn.execute(
+                """
+                SELECT
+                    AVG(turnos) AS media_turnos, MIN(turnos) AS min_turnos, MAX(turnos) AS max_turnos,
+                    AVG(rodadas) AS media_rodadas, MIN(rodadas) AS min_rodadas, MAX(rodadas) AS max_rodadas,
+                    AVG(pontos_a) AS media_pontos_a, AVG(pontos_b) AS media_pontos_b,
+                    AVG(ABS(pontos_a - pontos_b)) AS media_diferenca_pontos,
+                    MAX(ABS(pontos_a - pontos_b)) AS maior_margem_pontos,
+                    SUM(teve_comeback) AS n_comebacks,
+                    SUM(CASE WHEN vencedor_papel IS NOT NULL AND vencedor_papel = primeiro_papel THEN 1 ELSE 0 END)
+                        AS vitorias_jogando_primeiro,
+                    SUM(CASE WHEN vencedor_papel IS NOT NULL THEN 1 ELSE 0 END) AS partidas_decididas,
+                    SUM(CASE WHEN juiz_papeis LIKE '%A%' THEN 1 ELSE 0 END) AS juiz_a,
+                    SUM(CASE WHEN juiz_papeis LIKE '%B%' THEN 1 ELSE 0 END) AS juiz_b,
+                    SUM(CASE WHEN espiral_papeis LIKE '%A%' THEN 1 ELSE 0 END) AS espiral_a,
+                    SUM(CASE WHEN espiral_papeis LIKE '%B%' THEN 1 ELSE 0 END) AS espiral_b,
+                    SUM(CASE WHEN mulligan_desistencia_papeis LIKE '%A%' THEN 1 ELSE 0 END) AS mulligan_a,
+                    SUM(CASE WHEN mulligan_desistencia_papeis LIKE '%B%' THEN 1 ELSE 0 END) AS mulligan_b
+                FROM partidas WHERE lote_id = ?
+                """,
+                (lote_id,),
+            ).fetchone()
+        )
+
+        mediana_turnos = _percentil(conn, lote_id, "turnos", 0.5, total)
+        mediana_rodadas = _percentil(conn, lote_id, "rodadas", 0.5, total)
+
+        def _media_com_filtro(coluna: str, operador: str, valor) -> float | None:
+            linha = conn.execute(
+                f"SELECT AVG({coluna}) AS m FROM partidas WHERE lote_id = ? AND {coluna} {operador} ?",
+                (lote_id, valor),
+            ).fetchone()
+            return linha["m"]
+
+        media_turnos_curtas = _media_com_filtro("turnos", "<=", mediana_turnos)
+        media_turnos_longas = _media_com_filtro("turnos", ">", mediana_turnos)
+        # se todas as partidas tiverem a mesma duração, a metade "longa" fica
+        # vazia (nada acima da mediana) — cai pro mesmo valor da mediana.
+        if media_turnos_longas is None:
+            media_turnos_longas = media_turnos_curtas
+
+        eventos_media: dict[str, float] = {}
+        for linha in conn.execute(
+            """
+            SELECT je.key AS chave, SUM(je.value) AS soma
+            FROM partidas p, json_each(p.eventos_json) je
+            WHERE p.lote_id = ?
+            GROUP BY je.key
+            """,
+            (lote_id,),
+        ).fetchall():
+            eventos_media[linha["chave"]] = linha["soma"] / total
+
+    partidas_decididas = agregados["partidas_decididas"] or 0
+
+    return {
+        "total": total,
+        "turnos": {
+            "media": agregados["media_turnos"],
+            "mediana": mediana_turnos,
+            "min": agregados["min_turnos"],
+            "max": agregados["max_turnos"],
+            "media_metade_mais_curta": media_turnos_curtas,
+            "media_metade_mais_longa": media_turnos_longas,
+        },
+        "rodadas": {
+            "media": agregados["media_rodadas"],
+            "mediana": mediana_rodadas,
+            "min": agregados["min_rodadas"],
+            "max": agregados["max_rodadas"],
+        },
+        "pontos": {
+            "media_pontos_a": agregados["media_pontos_a"],
+            "media_pontos_b": agregados["media_pontos_b"],
+            "media_diferenca": agregados["media_diferenca_pontos"],
+            "maior_margem": agregados["maior_margem_pontos"],
+        },
+        "taxa_comeback": (agregados["n_comebacks"] or 0) / total,
+        "vantagem_primeiro_jogador": {
+            "partidas_decididas": partidas_decididas,
+            "taxa_vitoria_jogando_primeiro": (
+                (agregados["vitorias_jogando_primeiro"] or 0) / partidas_decididas if partidas_decididas else None
+            ),
+        },
+        "taxa_juiz": {"a": (agregados["juiz_a"] or 0) / total, "b": (agregados["juiz_b"] or 0) / total},
+        "taxa_espiral": {"a": (agregados["espiral_a"] or 0) / total, "b": (agregados["espiral_b"] or 0) / total},
+        "taxa_mulligan_desistencia": {
+            "a": (agregados["mulligan_a"] or 0) / total, "b": (agregados["mulligan_b"] or 0) / total,
+        },
+        "eventos_media_por_partida": eventos_media,
+    }
 
 
 def listar_partidas_lote(lote_id: int, limit: int = 50, offset: int = 0) -> list[dict]:
