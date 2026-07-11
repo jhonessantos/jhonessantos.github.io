@@ -23,6 +23,7 @@ from pydantic import BaseModel  # noqa: E402
 import cartas_lote  # noqa: E402
 import db  # noqa: E402
 from ai.personas_catalogo import listar_ias  # noqa: E402
+from analise_lote import analisar_lote  # noqa: E402
 from card_view import construir_view_carta, desserializar_carta, serializar_carta  # noqa: E402
 from cardpool import CardPool, N_VARIACOES_OFICIAIS, montar_deck  # noqa: E402
 from config import carregar_config  # noqa: E402
@@ -345,7 +346,9 @@ def obter_lote(lote_id: int) -> dict:
 def estatisticas_do_lote(lote_id: int) -> dict:
     if db.obter_lote(lote_id) is None:
         raise HTTPException(status_code=404, detail="Lote não encontrado")
-    return db.estatisticas_lote(lote_id)
+    stats = db.estatisticas_lote(lote_id)
+    stats["analise"] = analisar_lote(stats, db.resumo_vitorias_lote(lote_id))
+    return stats
 
 
 @app.get("/api/lotes/{lote_id}/partidas")

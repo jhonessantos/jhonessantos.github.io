@@ -138,3 +138,18 @@ def test_metade_longa_cai_pra_media_geral_quando_todas_partidas_tem_mesma_duraca
     turnos = db_temporario.estatisticas_lote(lote_id)["turnos"]
     assert turnos["media_metade_mais_curta"] == 15
     assert turnos["media_metade_mais_longa"] == 15
+
+
+def test_estatisticas_lote_encaixa_no_formato_esperado_por_analisar_lote(db_temporario):
+    """Integração: o dict que db.estatisticas_lote produz precisa ter
+    exatamente as chaves que analise_lote.analisar_lote espera (é isso que
+    o endpoint /api/lotes/{id}/estatisticas monta na prática)."""
+    from analise_lote import analisar_lote
+
+    lote_id = _lote_com_4_partidas_conhecidas(db_temporario)
+    stats = db_temporario.estatisticas_lote(lote_id)
+    resumo = db_temporario.resumo_vitorias_lote(lote_id)
+
+    paragrafos = analisar_lote(stats, resumo)
+    assert len(paragrafos) >= 1
+    assert all(isinstance(p, str) and p for p in paragrafos)

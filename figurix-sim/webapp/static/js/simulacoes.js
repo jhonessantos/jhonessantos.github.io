@@ -179,52 +179,72 @@ function num(valor, casas = 1) {
   return Number(valor).toFixed(casas);
 }
 
+function escapeAttr(texto) {
+  return String(texto).replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+}
+
+function item(valor, rotulo, explicacao) {
+  return `
+    <div class="relatorio-item" title="${escapeAttr(explicacao)}">
+      <div class="valor">${valor}</div><div class="rotulo">${rotulo}</div>
+    </div>
+  `;
+}
+
 function criarRelatorioDetalhado(stats) {
   if (!stats || stats.total === 0) {
     return `<div class="relatorio-detalhado">Sem partidas registradas ainda.</div>`;
   }
   const eventosOrdenados = Object.entries(stats.eventos_media_por_partida || {}).sort((a, b) => b[1] - a[1]);
+  const analise = stats.analise || [];
 
   return `
     <div class="relatorio-detalhado">
+      ${analise.length > 0 ? `
+      <div class="relatorio-secao relatorio-analise">
+        <div class="rotulo-secao">Análise automática</div>
+        ${analise.map((paragrafo) => `<p>${paragrafo}</p>`).join("")}
+      </div>
+      ` : ""}
+
       <div class="relatorio-secao">
         <div class="rotulo-secao">Duração (turnos)</div>
         <div class="relatorio-grade">
-          <div class="relatorio-item"><div class="valor">${num(stats.turnos.media)}</div><div class="rotulo">média</div></div>
-          <div class="relatorio-item"><div class="valor">${num(stats.turnos.mediana, 0)}</div><div class="rotulo">mediana</div></div>
-          <div class="relatorio-item"><div class="valor">${stats.turnos.min}–${stats.turnos.max}</div><div class="rotulo">min–max</div></div>
-          <div class="relatorio-item"><div class="valor">${num(stats.turnos.media_metade_mais_curta)}</div><div class="rotulo">média partidas curtas</div></div>
-          <div class="relatorio-item"><div class="valor">${num(stats.turnos.media_metade_mais_longa)}</div><div class="rotulo">média partidas longas</div></div>
+          ${item(num(stats.turnos.media), "média", "Número médio de turnos (1 turno = a vez de UM jogador) até a partida terminar.")}
+          ${item(num(stats.turnos.mediana, 0), "mediana", "Valor central: metade das partidas teve menos turnos que isso, metade teve mais.")}
+          ${item(`${stats.turnos.min}–${stats.turnos.max}`, "min–max", "A partida mais curta e a mais longa do lote, em turnos.")}
+          ${item(num(stats.turnos.media_metade_mais_curta), "média partidas curtas", "Média de turnos considerando só a metade das partidas mais curtas (abaixo da mediana).")}
+          ${item(num(stats.turnos.media_metade_mais_longa), "média partidas longas", "Média de turnos considerando só a metade das partidas mais longas (acima da mediana).")}
         </div>
       </div>
 
       <div class="relatorio-secao">
         <div class="rotulo-secao">Duração (rodadas)</div>
         <div class="relatorio-grade">
-          <div class="relatorio-item"><div class="valor">${num(stats.rodadas.media)}</div><div class="rotulo">média</div></div>
-          <div class="relatorio-item"><div class="valor">${num(stats.rodadas.mediana, 0)}</div><div class="rotulo">mediana</div></div>
-          <div class="relatorio-item"><div class="valor">${stats.rodadas.min}–${stats.rodadas.max}</div><div class="rotulo">min–max</div></div>
+          ${item(num(stats.rodadas.media), "média", "Número médio de rodadas (1 rodada = 1 turno de cada jogador) até a partida terminar.")}
+          ${item(num(stats.rodadas.mediana, 0), "mediana", "Valor central das rodadas: metade das partidas teve menos, metade teve mais.")}
+          ${item(`${stats.rodadas.min}–${stats.rodadas.max}`, "min–max", "A partida mais curta e a mais longa do lote, em rodadas.")}
         </div>
       </div>
 
       <div class="relatorio-secao">
         <div class="rotulo-secao">Pontuação</div>
         <div class="relatorio-grade">
-          <div class="relatorio-item"><div class="valor">${num(stats.pontos.media_pontos_a)}</div><div class="rotulo">média pontos A</div></div>
-          <div class="relatorio-item"><div class="valor">${num(stats.pontos.media_pontos_b)}</div><div class="rotulo">média pontos B</div></div>
-          <div class="relatorio-item"><div class="valor">${num(stats.pontos.media_diferenca)}</div><div class="rotulo">diferença média</div></div>
-          <div class="relatorio-item"><div class="valor">${stats.pontos.maior_margem}</div><div class="rotulo">maior margem</div></div>
+          ${item(num(stats.pontos.media_pontos_a), "média pontos A", "Pontuação média do lado A ao final das partidas (vence quem chega a 10 pontos).")}
+          ${item(num(stats.pontos.media_pontos_b), "média pontos B", "Pontuação média do lado B ao final das partidas (vence quem chega a 10 pontos).")}
+          ${item(num(stats.pontos.media_diferenca), "diferença média", "Diferença média de pontos entre os dois lados em cada partida — quanto maior, mais lopsided o confronto tende a ser.")}
+          ${item(stats.pontos.maior_margem, "maior margem", "A maior diferença de pontos observada numa única partida do lote.")}
         </div>
       </div>
 
       <div class="relatorio-secao">
         <div class="rotulo-secao">Mecânicas</div>
         <div class="relatorio-grade">
-          <div class="relatorio-item"><div class="valor">${pct(stats.taxa_comeback)}</div><div class="rotulo">partidas com virada</div></div>
-          <div class="relatorio-item"><div class="valor">${pct(stats.vantagem_primeiro_jogador.taxa_vitoria_jogando_primeiro)}</div><div class="rotulo">vitória jogando 1º</div></div>
-          <div class="relatorio-item"><div class="valor">${pct(stats.taxa_juiz.a)} / ${pct(stats.taxa_juiz.b)}</div><div class="rotulo">Juiz invocado (A / B)</div></div>
-          <div class="relatorio-item"><div class="valor">${pct(stats.taxa_espiral.a)} / ${pct(stats.taxa_espiral.b)}</div><div class="rotulo">espiral de busca (A / B)</div></div>
-          <div class="relatorio-item"><div class="valor">${pct(stats.taxa_mulligan_desistencia.a)} / ${pct(stats.taxa_mulligan_desistencia.b)}</div><div class="rotulo">desistência de mão (A / B)</div></div>
+          ${item(pct(stats.taxa_comeback), "partidas com virada", "Em quantas partidas o vencedor já esteve perdendo por uma margem grande antes de virar o jogo.")}
+          ${item(pct(stats.vantagem_primeiro_jogador.taxa_vitoria_jogando_primeiro), "vitória jogando 1º", "Entre as partidas com vencedor definido, em quantas o lado que jogou primeiro venceu — mede a vantagem de agir primeiro.")}
+          ${item(`${pct(stats.taxa_juiz.a)} / ${pct(stats.taxa_juiz.b)}`, "Juiz invocado (A / B)", "Em quantas partidas o lado A/B conseguiu invocar o Juiz com sucesso — cura o herói, equaliza a força do adversário a seu favor e remove itens/guardiões/mestre do oponente.")}
+          ${item(`${pct(stats.taxa_espiral.a)} / ${pct(stats.taxa_espiral.b)}`, "espiral de busca (A / B)", "Em quantas partidas o lado A/B ficou sem herói comum pra repor um derrotado, caindo na espiral de busca (mecânica punitiva, pode custar pontos de graça).")}
+          ${item(`${pct(stats.taxa_mulligan_desistencia.a)} / ${pct(stats.taxa_mulligan_desistencia.b)}`, "desistência de mão (A / B)", "Em quantas partidas o lado A/B desistiu voluntariamente da mão inicial — dá 1 compra extra e, da 2ª vez em diante, 1 ponto de graça ao adversário.")}
         </div>
       </div>
 
@@ -232,7 +252,7 @@ function criarRelatorioDetalhado(stats) {
       <div class="relatorio-secao">
         <div class="rotulo-secao">Eventos em média por partida</div>
         <div class="relatorio-eventos">
-          ${eventosOrdenados.map(([chave, media]) => `<span class="pill-evento">${chave}: ${num(media, 2)}</span>`).join("")}
+          ${eventosOrdenados.map(([chave, media]) => `<span class="pill-evento" title="Quantas vezes '${escapeAttr(chave)}' aconteceu, em média, por partida (somando os dois lados).">${chave}: ${num(media, 2)}</span>`).join("")}
         </div>
       </div>
       ` : ""}
